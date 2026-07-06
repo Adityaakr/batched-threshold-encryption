@@ -692,3 +692,77 @@ tbody tr:hover {
   font-size: 13px;
   margin-left: 6px;
 }
+
+/* ---------- crypto trace (behind the scenes) ---------- */
+
+.trace {
+  list-style: none;
+  margin: 18px 0 4px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.trace-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.trace-marker {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  transition: background-color 150ms cubic-bezier(0, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.trace-active .trace-marker {
+  border-color: var(--accent);
+}
+
+.trace-done .trace-marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  /* a small white check drawn with a gradient-free clip */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.8 6.2l2.1 2.1 4.3-4.6' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 10px 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.trace-todo .trace-label {
+  color: var(--muted);
+}
+
+.trace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.trace-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.trace-detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .trace-active .trace-marker {
+    animation: dot-pulse 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .trace-done .trace-body {
+    animation: reveal-in 200ms cubic-bezier(0, 0, 0.2, 1) both;
+  }
+}

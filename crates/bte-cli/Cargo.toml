@@ -1,0 +1,11 @@
+[package]
+name = "bte-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "bte-cli: ceremony, committee init, dev helpers"
+
+[dependencies]
+bte-crypto = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }

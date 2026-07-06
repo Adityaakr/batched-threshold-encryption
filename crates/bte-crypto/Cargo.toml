@@ -1,0 +1,32 @@
+[package]
+name = "bte-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wire types and wrapper over commonware's simple-bte batched threshold encryption"
+
+[features]
+default = ["full"]
+# seal-only: what the wasm SDK builds — seal + wire types, no server-side recovery deps.
+seal-only = []
+# full: ceremony, partial, verify_share, recover, pre_decrypt, finalize.
+full = []
+
+[dependencies]
+simple-bte = { workspace = true }
+ark-bls12-381 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "bte_ops"
+harness = false

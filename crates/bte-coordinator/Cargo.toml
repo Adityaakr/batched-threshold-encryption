@@ -1,0 +1,15 @@
+[package]
+name = "bte-coordinator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "bte coordinator: registry + condition engine + aggregator + REST + sqlite"
+
+[dependencies]
+bte-crypto = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]

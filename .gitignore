@@ -1,0 +1,15 @@
+target/
+node_modules/
+dist/
+vendor/
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+.dev-ceremony/
+.prism/runs/
+contracts/out/
+contracts/cache/
+packages/sdk/pkg/
+packages/explorer/.vite/

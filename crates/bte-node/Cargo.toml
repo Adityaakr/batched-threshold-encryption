@@ -1,0 +1,13 @@
+[package]
+name = "bte-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "bte operator node: poll work, compute partials, post shares"
+
+[dependencies]
+bte-crypto = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

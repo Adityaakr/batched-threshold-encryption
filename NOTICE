@@ -1,0 +1,14 @@
+bte — reveal-later encryption network
+Copyright 2026 the bte authors
+
+This product builds on the batched threshold encryption scheme and prototype by
+the Commonware team:
+
+  - simple-bte (https://github.com/commonwarexyz/simple-bte), dual-licensed
+    Apache-2.0 / MIT. All pairing math, group FFTs, and the BTE scheme itself
+    come from that crate, used here unmodified as a dependency.
+  - "Batched Threshold Encryption: A Simple Construction", Guru Vamsi
+    Policharla, IACR eprint 2026/760 (https://eprint.iacr.org/2026/760), and
+    the accompanying write-up at https://commonware.xyz/blogs/bte.
+
+Licensed under the Apache License, Version 2.0.

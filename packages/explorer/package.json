@@ -1,0 +1,7 @@
+{
+  "name": "bte-explorer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "bte explorer. Scaffolded in phase 0, implemented in phase 5.",
+  "license": "Apache-2.0"
+}

@@ -66,6 +66,11 @@ function hex(bytes: Uint8Array): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Recipient-side link: countdown first, content after the cue. */
+function sealLink(run: { conditionId: string; ctHash: string }): string {
+  return `${location.origin}${location.pathname}#/s/${encodeURIComponent(run.conditionId)}/${run.ctHash}`;
+}
+
 /** Parse a revealed slot into a playground entry (bids/votes are JSON). */
 function parseEntry(ctHash: string, text: string): Entry {
   try {
@@ -149,11 +154,31 @@ export function renderPlayground(host: HTMLElement): () => void {
             <option value="30">reveal in 30s</option>
             <option value="60" selected>reveal in 60s</option>
             <option value="120">reveal in 2m</option>
+            <option value="600">reveal in 10m</option>
+            <option value="3600">reveal in 1h</option>
+            <option value="custom">pick a date…</option>
           </select>
           <button type="submit" class="btn btn-primary" id="pg-seal">seal it</button>
+        </div>
+        <div class="pg-row pg-until-row" id="pg-until-row" hidden>
+          <label class="field-label" for="pg-until" style="margin:8px 0 0">sealed until</label>
+          <input id="pg-until" type="datetime-local" aria-label="sealed until" />
         </div>`;
       hintEl.textContent =
         'encrypted in this tab with wasm. nobody can read it early, us included. everyone can read it after.';
+      const delaySel = fieldsEl.querySelector<HTMLSelectElement>('#pg-delay')!;
+      const untilRow = fieldsEl.querySelector<HTMLElement>('#pg-until-row')!;
+      const untilInput = fieldsEl.querySelector<HTMLInputElement>('#pg-until')!;
+      const toLocal = (d: Date) => {
+        const pad = (v: number) => String(v).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+      const soon = new Date(Date.now() + 2 * 60_000);
+      untilInput.min = toLocal(soon);
+      untilInput.value = toLocal(new Date(Date.now() + 60 * 60_000));
+      delaySel.addEventListener('change', () => {
+        untilRow.hidden = delaySel.value !== 'custom';
+      });
     }
     void updateRoundNote();
   }
@@ -263,8 +288,17 @@ export function renderPlayground(host: HTMLElement): () => void {
       // Bids and votes join the open shared round; capsules get their own.
       let conditionId: string;
       if (scenario === 'note') {
-        const delay = Number(host.querySelector<HTMLSelectElement>('#pg-delay')?.value ?? 60);
-        conditionId = await client.condition({ in: delay });
+        const delayVal = host.querySelector<HTMLSelectElement>('#pg-delay')?.value ?? '60';
+        if (delayVal === 'custom') {
+          const untilVal = host.querySelector<HTMLInputElement>('#pg-until')?.value ?? '';
+          const until = new Date(untilVal);
+          if (!untilVal || Number.isNaN(until.getTime()) || until.getTime() < Date.now() + 60_000) {
+            throw new Error('pick a date at least a minute in the future');
+          }
+          conditionId = await client.condition({ at: until });
+        } else {
+          conditionId = await client.condition({ in: Number(delayVal) });
+        }
       } else {
         const open = await findOpenRound();
         conditionId = open ? open.id : await client.condition({ in: ROUND_SECS });
@@ -430,8 +464,10 @@ export function renderPlayground(host: HTMLElement): () => void {
           <p class="pg-status" id="pg-head"></p>
           <div id="pg-rest"></div>
           <p class="pg-links">
+            <button type="button" class="btn" data-copy="${esc(sealLink(run))}">copy share link</button>
             <a class="link" href="#/condition/${encodeURIComponent(run.conditionId)}">watch it in the explorer</a>
           </p>
+          <p class="field-hint">send the link to anyone. they get the countdown, then the content, on the same cue.</p>
         </div>
       `;
       wireCopy(liveEl);
@@ -550,12 +586,14 @@ export function renderPlayground(host: HTMLElement): () => void {
         <p class="muted">everyone can read this now. before the cue, nobody could, operators included.</p>
         ${traceHtml()}
         <p class="pg-links">
+          <button type="button" class="btn" data-copy="${esc(sealLink(run))}">copy share link</button>
           <a class="link" href="#/condition/${encodeURIComponent(run.conditionId)}">see the full reveal, shares and timings</a>
           <button type="button" class="btn" id="pg-again">seal another</button>
         </p>
       </div>
     `;
     lastRest = '';
+    wireCopy(liveEl);
     liveEl.querySelector<HTMLButtonElement>('#pg-again')?.addEventListener('click', () => {
       run = null;
       liveEl.hidden = true;

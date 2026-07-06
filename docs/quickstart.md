@@ -13,7 +13,7 @@ From zero to a sealed-bid auction in about five minutes.
 ## 1. boot the network
 
 ```bash
-git clone https://github.com/Adityaakr/bte && cd bte
+git clone https://github.com/Adityaakr/batched-threshold-encryption && cd bte
 just setup
 just compose-up
 ```

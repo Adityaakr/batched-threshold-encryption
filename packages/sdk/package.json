@@ -37,7 +37,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adityaakr/bte.git",
+    "url": "git+https://github.com/Adityaakr/batched-threshold-encryption.git",
     "directory": "packages/sdk"
   },
   "devDependencies": {

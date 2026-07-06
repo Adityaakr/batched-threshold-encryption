@@ -59,7 +59,7 @@ Prereqs: rust stable, node 20+, pnpm, docker, [just](https://github.com/casey/ju
 wasm-pack. Foundry only for the onchain anchor.
 
 ```bash
-git clone https://github.com/Adityaakr/bte && cd bte
+git clone https://github.com/Adityaakr/batched-threshold-encryption && cd bte
 just setup          # toolchain + deps
 just compose-up     # 1 coordinator + fresh ceremony + 5 operator nodes
 just demo           # sealed-bid auction: 8 bidders, 60s cue, winner crowned

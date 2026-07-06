@@ -36,7 +36,7 @@ Caption: "one operator lied. one died. the reveal happened anyway."
 > console.log(reveal.slots.map(s => s.text));
 > ```
 >
-> playground: <PLAYGROUND_URL_PLACEHOLDER> · code: github.com/Adityaakr/bte
+> playground: <PLAYGROUND_URL_PLACEHOLDER> · code: github.com/Adityaakr/batched-threshold-encryption
 > · built on commonware's batched threshold encryption (eprint 2026/760)
 >
 > v0: dealer-trusted setup. testnet toy.

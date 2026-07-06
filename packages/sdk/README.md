@@ -2,7 +2,7 @@
 
 **seal now. reveal on cue.** Commit-reveal without the second transaction.
 
-Seal data to a t-of-n committee running [bte](https://github.com/Adityaakr/bte);
+Seal data to a t-of-n committee running [bte](https://github.com/Adityaakr/batched-threshold-encryption);
 when the condition fires, the whole batch is revealed to everyone. Nothing is
 readable early, not even by the operators.
 

@@ -9,15 +9,15 @@
 - [x] Phase 4 — bte-sdk npm package
 - [x] Phase 5 — explorer
 - [x] Phase 6 — demos, benches, launch collateral
-- [ ] Phase 7 — sepolia anchor (IN PROGRESS)
-- [ ] Phase 8 — ship pack
+- [x] Phase 7 — sepolia anchor
+- [x] Phase 8 — ship pack
+
+ALL PHASES COMPLETE. See REPORT.md.
 
 ## Current status
 
-Phases 0-4 complete, all gates green. simple-bte read end to end; `fo` module
-(FO transform) is the payload path with built-in Shamir thresholdization in
-`crs::setup`. Crypto core, coordinator, node network, and publishable SDK all
-tested. Next: explorer (phase 5) + demos (phase 6).
+Build complete, phases 0-8, every gate green. See REPORT.md for the
+definition-of-done checklist, bench table, deviations, and run commands.
 
 ## Gate results
 
@@ -43,6 +43,12 @@ tested. Next: explorer (phase 5) + demos (phase 6).
   verify_share 12.0ms; pre_decrypt 245ms + finalize 37ms (B=64);
   recover e2e 432ms. Consistent with paper scale (121.5ms @ B=32,
   593.63ms @ B=128).
+- Phase 7: `forge test` 6/6 green; anchored demo PASS against anvil
+  (coordinator root == onchain root == SDK-recomputed root; winner asserted).
+- Phase 8: `just prod-up` boots (Caddy TLS edge, explorer served, healthz ok);
+  in-network e2e PASS on the prod stack; `just publish-dry` clean; final
+  sweep green (clippy 0 errors, 13 rust test targets ok, forge 6/6, sdk 7/7,
+  explorer builds).
 
 ## Decisions log
 

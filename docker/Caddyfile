@@ -1,0 +1,15 @@
+# bte production edge: TLS (automatic for real domains, internal CA for
+# localhost), API reverse proxy, static explorer.
+{$BTE_DOMAIN:localhost} {
+	encode gzip
+
+	handle /v0/* {
+		reverse_proxy coordinator:8080
+	}
+
+	handle {
+		root * /srv/explorer
+		try_files {path} /index.html
+		file_server
+	}
+}

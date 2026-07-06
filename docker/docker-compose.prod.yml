@@ -1,0 +1,104 @@
+# bte production/devnet compose: coordinator + 5 nodes + Caddy edge (TLS,
+# reverse proxy, static explorer). See docs/devnet-runbook.md.
+#
+# For a REAL deployment: run the ceremony on an offline machine and distribute
+# keystores to operator hosts (runbook section 1) instead of using the
+# in-compose ceremony service, and set BTE_DOMAIN + BTE_KEYSTORE_PASS.
+
+x-node: &node
+  image: bte:prod
+  environment: &node-env
+    BTE_KEYSTORE_PASS: ${BTE_KEYSTORE_PASS:-change-me-devnet}
+    BTE_COORDINATOR_URL: http://coordinator:8080
+    RUST_LOG: info
+  volumes:
+    - ceremony:/ceremony:ro
+  depends_on:
+    ceremony:
+      condition: service_completed_successfully
+  restart: always
+
+services:
+  coordinator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: bte:prod
+    command: bte-coordinator
+    environment:
+      DATABASE_URL: sqlite:///data/bte.db
+      REVEAL_TIMEOUT_SECS: "300"
+      # Production rate limits: 5 req/s sustained, burst 30, per IP.
+      BTE_RATE_RPS: "5"
+      BTE_RATE_BURST: "30"
+      RUST_LOG: info
+      SEPOLIA_RPC_URL: ${SEPOLIA_RPC_URL:-}
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/v0/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: always
+
+  ceremony:
+    image: bte:prod
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if [ ! -f /ceremony/params.bin ]; then
+          echo "WARNING: running the trusted-dealer ceremony INSIDE compose."
+          echo "For a real devnet do this on an offline machine (see runbook)."
+          bte-cli ceremony --n 5 --t 3 --b 64 --out /ceremony
+        fi
+        bte-cli committee-init --coordinator http://coordinator:8080 --params /ceremony/params.bin
+    environment:
+      BTE_KEYSTORE_PASS: ${BTE_KEYSTORE_PASS:-change-me-devnet}
+    volumes:
+      - ceremony:/ceremony
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    restart: "no"
+
+  node1:
+    <<: *node
+    command: bte-node --operator-id 1 --key /ceremony/operator-1.keystore
+  node2:
+    <<: *node
+    command: bte-node --operator-id 2 --key /ceremony/operator-2.keystore
+  node3:
+    <<: *node
+    command: bte-node --operator-id 3 --key /ceremony/operator-3.keystore
+  node4:
+    <<: *node
+    command: bte-node --operator-id 4 --key /ceremony/operator-4.keystore
+  node5:
+    <<: *node
+    command: bte-node --operator-id 5 --key /ceremony/operator-5.keystore
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    environment:
+      BTE_DOMAIN: ${BTE_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  data:
+  ceremony:
+  caddy_data:
+  caddy_config:

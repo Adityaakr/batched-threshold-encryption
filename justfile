@@ -5,6 +5,7 @@ default:
 
 setup:
     rustup target add wasm32-unknown-unknown
+    git submodule update --init --recursive
     cargo fetch
     pnpm install
 
@@ -39,9 +40,9 @@ test-e2e:
 ceremony:
     BTE_KEYSTORE_PASS=${BTE_KEYSTORE_PASS:-devnet-pass} cargo run --release -p bte-cli -- ceremony --n 5 --t 3 --b 64 --out .dev-ceremony
 
-# Sealed-bid auction against the live stack (run `just compose-up` first).
+# Sealed-bid auction. Boots the dev network first if it is not up.
 demo:
-    @curl -fsS http://localhost:8080/v0/healthz >/dev/null || { echo "coordinator not up. run: just compose-up"; exit 1; }
+    @curl -fsS http://localhost:8080/v0/healthz >/dev/null 2>&1 || just compose-up
     node demos/sealed-bid/index.ts
 
 # Same auction with operator 2 byzantine and operator 5 killed mid-flow.
@@ -68,8 +69,16 @@ publish-dry:
     pnpm -C packages/sdk test
     cd packages/sdk && npm publish --dry-run
 
+# Boot the production compose locally (Caddy on 80/443 with internal CA).
 prod-up:
-    @echo "prod-up: implemented in phase 8" && exit 1
+    docker compose -f docker/docker-compose.prod.yml up -d --build
+    @echo "waiting for the edge…"
+    @for i in $(seq 1 90); do curl -fsSk https://localhost/v0/healthz >/dev/null 2>&1 && break; sleep 1; done
+    curl -fsSk https://localhost/v0/healthz
+    @echo "\nexplorer: https://localhost  api: https://localhost/v0"
+
+prod-down:
+    docker compose -f docker/docker-compose.prod.yml down -v
 
 # Anchored auction: Sepolia when SEPOLIA_RPC_URL+ANCHOR_PRIVATE_KEY are set,
 # local anvil otherwise. (forge build must have run once.)

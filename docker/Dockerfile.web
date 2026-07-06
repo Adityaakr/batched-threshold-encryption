@@ -1,0 +1,12 @@
+# Explorer static build baked into the Caddy edge image.
+FROM node:22-alpine AS explorer
+WORKDIR /app
+COPY packages/explorer .
+# Empty VITE_BTE_URL makes the explorer call /v0 relative to its own origin,
+# which Caddy proxies to the coordinator.
+ENV VITE_BTE_URL=""
+RUN npm install --no-package-lock && npm run build
+
+FROM caddy:2-alpine
+COPY --from=explorer /app/dist /srv/explorer
+COPY docker/Caddyfile /etc/caddy/Caddyfile

@@ -77,7 +77,10 @@ fn load_config(cli: Cli) -> Result<Config> {
             .key
             .or(section.key_path.map(Into::into))
             .or(std::env::var("BTE_KEY_PATH").ok().map(Into::into))
-            .context("key path required (flag, config, or BTE_KEY_PATH)")?,
+            .unwrap_or_else(|| {
+                // Unused when BTE_KEYSTORE_JSON is set; validated at open time.
+                std::path::PathBuf::from("/ceremony/operator.keystore")
+            }),
         poll_ms: cli.poll_ms,
         byzantine: cli.byzantine,
     })
@@ -110,7 +113,14 @@ async fn main() -> Result<()> {
 
     let passphrase = std::env::var("BTE_KEYSTORE_PASS")
         .context("BTE_KEYSTORE_PASS required to open the keystore")?;
-    let ks = keystore::read_keystore(&cfg.key_path)?;
+    // Cloud deploys without shared volumes can inject the (encrypted)
+    // keystore JSON directly via env instead of a file path.
+    let ks = match std::env::var("BTE_KEYSTORE_JSON") {
+        Ok(json) => {
+            serde_json::from_str(&json).context("BTE_KEYSTORE_JSON is not valid keystore JSON")?
+        }
+        Err(_) => keystore::read_keystore(&cfg.key_path)?,
+    };
     let secret = keystore::open_keystore(&ks, &passphrase)?;
     if secret.party_index != cfg.operator_id {
         bail!(

@@ -35,7 +35,11 @@ async fn main() -> Result<()> {
         }
     });
 
-    let addr = std::env::var("BTE_LISTEN").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    // BTE_LISTEN wins; PORT (Railway/Heroku-style) second; 8080 default.
+    let addr = std::env::var("BTE_LISTEN").unwrap_or_else(|_| {
+        let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+        format!("0.0.0.0:{port}")
+    });
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!(%addr, "bte-coordinator listening");
     axum::serve(

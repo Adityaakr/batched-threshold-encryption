@@ -44,7 +44,7 @@ pub fn seal_keystore(secret: &OperatorSecret, passphrase: &str) -> Result<Keysto
     let key = derive_key(passphrase, &salt)?;
     let cipher = ChaCha20Poly1305::new((&key).into());
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), secret.to_bytes().as_slice())
+        .encrypt(&Nonce::try_from(&nonce[..]).expect("12-byte nonce"), secret.to_bytes().as_slice())
         .map_err(|_| anyhow::anyhow!("keystore encryption failed"))?;
 
     Ok(KeystoreFile {
@@ -63,13 +63,16 @@ pub fn open_keystore(file: &KeystoreFile, passphrase: &str) -> Result<OperatorSe
     }
     let salt = B64.decode(&file.salt_b64).context("bad salt encoding")?;
     let nonce = B64.decode(&file.nonce_b64).context("bad nonce encoding")?;
+    if nonce.len() != 12 {
+        bail!("keystore nonce must be 12 bytes");
+    }
     let ct = B64
         .decode(&file.ciphertext_b64)
         .context("bad ciphertext encoding")?;
     let key = derive_key(passphrase, &salt)?;
     let cipher = ChaCha20Poly1305::new((&key).into());
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ct.as_slice())
+        .decrypt(&Nonce::try_from(nonce.as_slice()).expect("12-byte nonce"), ct.as_slice())
         .map_err(|_| anyhow::anyhow!("keystore decryption failed (wrong passphrase?)"))?;
     let secret = OperatorSecret::from_bytes(&plaintext)
         .map_err(|e| anyhow::anyhow!("keystore payload invalid: {e}"))?;

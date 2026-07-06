@@ -1,0 +1,8 @@
+{
+  "name": "bte-examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "bte-sdk": "workspace:*"
+  }
+}

@@ -49,7 +49,9 @@ bench:
     cargo bench -p bte-crypto
 
 publish-dry:
-    @echo "publish-dry: implemented in phase 4" && exit 1
+    pnpm -C packages/sdk build
+    pnpm -C packages/sdk test
+    cd packages/sdk && npm publish --dry-run
 
 prod-up:
     @echo "prod-up: implemented in phase 8" && exit 1

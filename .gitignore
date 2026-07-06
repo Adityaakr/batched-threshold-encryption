@@ -13,3 +13,6 @@ contracts/out/
 contracts/cache/
 packages/sdk/pkg/
 packages/explorer/.vite/
+crates/bte-wasm/pkg-seal/
+crates/bte-wasm/pkg-verify/
+packages/sdk/src/generated/

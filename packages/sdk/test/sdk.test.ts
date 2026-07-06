@@ -1,0 +1,158 @@
+// SDK unit tests: wasm sealing against committed fixture params, and the
+// REST client against a mocked coordinator.
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { BteClient, MAX_PAYLOAD_BYTES, condition, seal } from '../src/index.js';
+import { b64ToBytes, bytesToB64, ensureWasm } from '../src/wasm.js';
+
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const paramsBytes = new Uint8Array(readFileSync(join(fixturesDir, 'params.bin')));
+
+describe('wasm sealing', () => {
+  it('parses fixture params and reports committee info', async () => {
+    const { Params } = await ensureWasm();
+    const params = new Params(paramsBytes);
+    const info = params.info() as any;
+    expect(info).toMatchObject({ n: 3, t: 2, b: 4 });
+    expect(info.digest).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('seals payloads into BTE_WIRE_V0 ciphertexts with 48-byte headers', async () => {
+    const { Params, ctHash } = await ensureWasm();
+    const params = new Params(paramsBytes);
+    const payload = new TextEncoder().encode('sealed bid: 42');
+    const sealed = params.seal(payload);
+    // magic "BTE0" + type 0x01
+    expect(Array.from(sealed.slice(0, 5))).toEqual([0x42, 0x54, 0x45, 0x30, 0x01]);
+    // framing(5) + header(48) + key mask(16) + len(4) + payload
+    expect(sealed.length).toBe(5 + 48 + 16 + 4 + payload.length);
+    expect(ctHash(sealed)).toMatch(/^[0-9a-f]{64}$/);
+    // Sealing is randomized: same payload, different ciphertext.
+    expect(bytesToB64(params.seal(payload))).not.toBe(bytesToB64(sealed));
+  });
+
+  it('rejects payloads over the cap', async () => {
+    const { Params } = await ensureWasm();
+    const params = new Params(paramsBytes);
+    expect(() => params.seal(new Uint8Array(MAX_PAYLOAD_BYTES + 1))).toThrow(/payload/);
+  });
+
+  it('rejects garbage params', async () => {
+    const { Params } = await ensureWasm();
+    expect(() => new Params(new Uint8Array([1, 2, 3]))).toThrow(/invalid params/);
+  });
+});
+
+function mockCoordinator() {
+  const digest = (() => {
+    // The client cross-checks info.digest against params_digest, so serve the
+    // real digest of the fixture params via wasm.
+    return ensureWasm().then(({ Params }) => {
+      const p = new Params(paramsBytes);
+      return (p.info() as any).digest as string;
+    });
+  })();
+
+  const calls: Array<{ url: string; body: any }> = [];
+  const fetchImpl = (async (input: any, init?: any) => {
+    const url = String(input);
+    const body = init?.body ? JSON.parse(init.body) : null;
+    calls.push({ url, body });
+    const json = (data: unknown, status = 200) =>
+      new Response(JSON.stringify(data), { status });
+
+    if (url.endsWith('/v0/committees/default')) {
+      return json({
+        id: await digest,
+        n: 3,
+        t: 2,
+        b: 4,
+        params_b64: bytesToB64(paramsBytes),
+        params_digest: await digest,
+        trust_model: 'v0: dealer-trusted setup. do not protect real value with this.',
+      });
+    }
+    if (url.endsWith('/v0/conditions') && init?.method === 'POST') {
+      return json({ id: 'cond_test', status: 'pending', fires_at: body.fires_at ?? 0 });
+    }
+    if (url.endsWith('/v0/ciphertexts')) {
+      return json({ ct_hash: 'a'.repeat(64) });
+    }
+    if (url.includes('/v0/reveals/cond_pending')) {
+      return json({ error: 'not revealed' }, 404);
+    }
+    if (url.includes('/v0/reveals/cond_test')) {
+      return json({
+        revealed_at: 1700000000,
+        merkle_root: 'b'.repeat(64),
+        slots: [
+          {
+            position: 0,
+            ct_hash: 'c'.repeat(64),
+            is_dummy: false,
+            valid: true,
+            payload_b64: bytesToB64(new TextEncoder().encode('hello reveal')),
+          },
+          {
+            position: 1,
+            ct_hash: 'd'.repeat(64),
+            is_dummy: true,
+            valid: true,
+            payload_b64: bytesToB64(new TextEncoder().encode('BTE_DUMMY_V0:xxxx')),
+          },
+        ],
+        shares: [
+          { batch_id: 1, operator_id: 1, verified: true, submitted_at_ms: 1 },
+          { batch_id: 1, operator_id: 2, verified: false, submitted_at_ms: 2 },
+        ],
+      });
+    }
+    return json({ error: `unmocked ${url}` }, 500);
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+describe('BteClient', () => {
+  it('creates conditions, seals client-side, and decodes reveals', async () => {
+    const { fetchImpl, calls } = mockCoordinator();
+    const client = new BteClient({ url: 'http://mock', fetch: fetchImpl });
+
+    const info = await client.committee();
+    expect(info).toMatchObject({ n: 3, t: 2, b: 4 });
+
+    const conditionId = await condition({ in: 60 }, client);
+    expect(conditionId).toBe('cond_test');
+
+    const { ctHash, sealedB64 } = await seal('my sealed bid', conditionId, client);
+    expect(ctHash).toMatch(/^[0-9a-f]{64}$/);
+    // What went over the wire is a real BTE0 ciphertext, not the plaintext.
+    const posted = calls.find((c) => c.url.endsWith('/v0/ciphertexts'))!;
+    expect(posted.body.sealed_blob_b64).toBe(sealedB64);
+    const sealedBytes = b64ToBytes(sealedB64);
+    expect(Array.from(sealedBytes.slice(0, 4))).toEqual([0x42, 0x54, 0x45, 0x30]);
+    const plaintext = new TextEncoder().encode('my sealed bid');
+    const asString = Array.from(sealedBytes).join(',');
+    expect(asString.includes(Array.from(plaintext).join(','))).toBe(false);
+
+    const reveal = await client.reveal(conditionId);
+    expect(reveal).not.toBeNull();
+    const real = reveal!.slots.filter((s) => !s.isDummy);
+    expect(real).toHaveLength(1);
+    expect(real[0].text).toBe('hello reveal');
+    expect(reveal!.shares.filter((s) => !s.verified)).toHaveLength(1);
+  });
+
+  it('returns null for unrevealed conditions', async () => {
+    const { fetchImpl } = mockCoordinator();
+    const client = new BteClient({ url: 'http://mock', fetch: fetchImpl });
+    expect(await client.reveal('cond_pending')).toBeNull();
+  });
+
+  it('rejects oversized payloads before any network call', async () => {
+    const { fetchImpl } = mockCoordinator();
+    const client = new BteClient({ url: 'http://mock', fetch: fetchImpl });
+    await expect(client.seal(new Uint8Array(5000), 'cond_test')).rejects.toThrow(/4096/);
+  });
+});

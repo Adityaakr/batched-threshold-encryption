@@ -10,6 +10,21 @@ Also: `bte-sdk`, `bte-examples`, `bte-demo-sealed-bid`, and
 **Delete those services.** You want exactly seven: 1 coordinator, 5 operator
 nodes, 1 web (explorer + edge).
 
+## config-as-code (the repo now carries the build settings)
+
+- `railway.json` (repo root): the DEFAULT config, set up for the **web**
+  service (Dockerfile.web + /v0/healthz healthcheck). A service linked to this
+  repo with no custom config path picks it up on the next deploy.
+- `railway/coordinator.json`: for the coordinator service. In its
+  Settings -> Config-as-code, set the path to `railway/coordinator.json`.
+- `railway/node.json`: for each node service, path `railway/node.json`.
+  Start command is plain `bte-node`; give each service `BTE_OPERATOR_ID=N`.
+
+IMPORTANT: if you previously typed a custom build command or start command in
+the dashboard (e.g. `pnpm --filter bte-explorer build` / `pnpm dev`), CLEAR
+those fields. Dashboard overrides fight the config file, and Railpack custom
+commands are meaningless under the Dockerfile builder.
+
 ## 0. run the ceremony locally (the dealer never lives in the cloud)
 
 ```bash
@@ -21,8 +36,8 @@ contents you will paste into one env var per node service.
 
 ## 1. coordinator service
 
-- Settings -> Build: **Dockerfile**, path `docker/Dockerfile` (root directory `/`).
-- Settings -> Deploy -> Start command: `bte-coordinator`
+- Settings -> Config-as-code path: `railway/coordinator.json` (sets the
+  Dockerfile builder and start command for you).
 - Variables:
   - `DATABASE_URL=sqlite:///data/bte.db`
   - `REVEAL_TIMEOUT_SECS=300`
@@ -47,9 +62,9 @@ through the web service's `/v0` proxy once it is up.)
 
 For N in 1..5, one service each:
 
-- Build: **Dockerfile**, path `docker/Dockerfile`.
-- Start command: `bte-node --operator-id N`
+- Config-as-code path: `railway/node.json`.
 - Variables:
+  - `BTE_OPERATOR_ID=N`
   - `BTE_COORDINATOR_URL=http://<coordinator service name>.railway.internal:8080`
     (private networking; the coordinator's internal port is whatever `PORT`
     Railway injected there — pin it by setting `PORT=8080` on the coordinator)
@@ -59,7 +74,7 @@ For N in 1..5, one service each:
 
 ## 3. web service (explorer + edge)
 
-- Build: **Dockerfile**, path `docker/Dockerfile.web`.
+- Uses the root `railway.json` automatically (no config path needed).
 - Variables:
   - `BTE_DOMAIN=:8080` (Caddy serves plain HTTP on 8080; Railway's edge does TLS)
   - `BTE_UPSTREAM=<coordinator service name>.railway.internal:8080`

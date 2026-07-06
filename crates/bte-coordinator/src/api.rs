@@ -1,0 +1,598 @@
+//! REST API (axum, JSON, /v0). See spec/index.md section 6.
+
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use base64::Engine;
+use bte_crypto::wire::header_to_bytes;
+use bte_crypto::{verify_share, SealedCiphertext, Share};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+use crate::db::{now_ms, unix_now};
+use crate::state::{new_id, App};
+
+const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+/// Sealed wire blob cap: framing + 48 + 16 + payload cap, with headroom.
+const MAX_SEALED_BLOB: usize = 8192;
+
+type ApiError = (StatusCode, Json<Value>);
+
+fn bad_request(msg: impl Into<String>) -> ApiError {
+    (StatusCode::BAD_REQUEST, Json(json!({"error": msg.into()})))
+}
+
+fn not_found(msg: &str) -> ApiError {
+    (StatusCode::NOT_FOUND, Json(json!({"error": msg})))
+}
+
+fn internal(e: impl std::fmt::Display) -> ApiError {
+    tracing::error!(error = %e, "internal error");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error": "internal error"})),
+    )
+}
+
+pub fn router(app: App) -> Router {
+    let api = Router::new()
+        .route("/conditions", post(create_condition))
+        .route("/conditions/{id}", get(get_condition))
+        .route("/ciphertexts", post(submit_ciphertext))
+        .route("/work", get(get_work))
+        .route("/shares", post(submit_share))
+        .route("/reveals/{condition_id}", get(get_reveal))
+        .route("/committees", get(list_committees).post(register_committee))
+        .route("/committees/{id}", get(get_committee))
+        .route("/healthz", get(|| async { Json(json!({"ok": true})) }));
+    Router::new()
+        .nest("/v0", api)
+        .layer(DefaultBodyLimit::max(MAX_SEALED_BLOB * 16))
+        .layer(axum::middleware::from_fn_with_state(
+            app.clone(),
+            rate_limit,
+        ))
+        .with_state(app)
+}
+
+/// Token-bucket per client IP (x-forwarded-for first hop, else socket addr,
+/// else "local" for in-process tests). Generous dev defaults via BTE_RATE_*.
+async fn rate_limit(
+    State(app): State<App>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let ip = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(',').next().unwrap_or(v).trim().to_string())
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                .map(|ci| ci.0.ip().to_string())
+        })
+        .unwrap_or_else(|| "local".to_string());
+
+    let allowed = {
+        let cfg = &app.0.cfg;
+        let mut buckets = app.0.buckets.lock().unwrap();
+        let now = now_ms();
+        let (tokens, last) = buckets.entry(ip).or_insert((cfg.rate_burst, now));
+        *tokens = (*tokens + (now - *last) as f64 / 1000.0 * cfg.rate_rps).min(cfg.rate_burst);
+        *last = now;
+        if *tokens >= 1.0 {
+            *tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    };
+    if !allowed {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": "rate limited"})),
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
+
+#[derive(Deserialize)]
+struct CreateCondition {
+    committee_id: Option<String>,
+    kind: Option<String>,
+    /// Absolute unix seconds…
+    fires_at: Option<i64>,
+    /// …or relative seconds from now.
+    in_secs: Option<i64>,
+    /// at_block (phase 7)
+    chain_id: Option<i64>,
+    height: Option<i64>,
+}
+
+async fn create_condition(
+    State(app): State<App>,
+    Json(req): Json<CreateCondition>,
+) -> Result<Json<Value>, ApiError> {
+    let committee_id = match req.committee_id {
+        Some(id) => id,
+        None => default_committee(&app).ok_or_else(|| bad_request("no committee registered"))?,
+    };
+    if app.committee(&committee_id).is_none() {
+        return Err(bad_request("unknown committee"));
+    }
+    let kind = req.kind.unwrap_or_else(|| "at_time".into());
+    let id = new_id("cond");
+    let now = unix_now();
+    match kind.as_str() {
+        "at_time" => {
+            let fires_at = match (req.fires_at, req.in_secs) {
+                (Some(at), _) => at,
+                (None, Some(in_secs)) => now + in_secs,
+                _ => return Err(bad_request("at_time needs fires_at or in_secs")),
+            };
+            if fires_at < now {
+                return Err(bad_request("fires_at is in the past"));
+            }
+            let conn = app.0.db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO conditions (id, committee_id, kind, fires_at, status, created_at)
+                 VALUES (?1, ?2, 'at_time', ?3, 'pending', ?4)",
+                rusqlite::params![id, committee_id, fires_at, now],
+            )
+            .map_err(internal)?;
+            Ok(Json(json!({
+                "id": id, "committee_id": committee_id, "kind": "at_time",
+                "fires_at": fires_at, "status": "pending"
+            })))
+        }
+        "at_block" => {
+            let (chain_id, height) = match (req.chain_id, req.height) {
+                (Some(c), Some(h)) => (c, h),
+                _ => return Err(bad_request("at_block needs chain_id and height")),
+            };
+            let conn = app.0.db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO conditions (id, committee_id, kind, chain_id, height, status, created_at)
+                 VALUES (?1, ?2, 'at_block', ?3, ?4, 'pending', ?5)",
+                rusqlite::params![id, committee_id, chain_id, height, now],
+            )
+            .map_err(internal)?;
+            Ok(Json(json!({
+                "id": id, "committee_id": committee_id, "kind": "at_block",
+                "chain_id": chain_id, "height": height, "status": "pending"
+            })))
+        }
+        _ => Err(bad_request("kind must be at_time or at_block")),
+    }
+}
+
+async fn get_condition(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = app.0.db.lock().unwrap();
+    let row = conn
+        .query_row(
+            "SELECT committee_id, kind, fires_at, chain_id, height, status, created_at
+             FROM conditions WHERE id = ?1",
+            [&id],
+            |r| {
+                Ok(json!({
+                    "id": id.clone(),
+                    "committee_id": r.get::<_, String>(0)?,
+                    "kind": r.get::<_, String>(1)?,
+                    "fires_at": r.get::<_, Option<i64>>(2)?,
+                    "chain_id": r.get::<_, Option<i64>>(3)?,
+                    "height": r.get::<_, Option<i64>>(4)?,
+                    "status": r.get::<_, String>(5)?,
+                    "created_at": r.get::<_, i64>(6)?,
+                }))
+            },
+        )
+        .map_err(|_| not_found("unknown condition"))?;
+    let mut body = row;
+    let counts: (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(is_dummy = 0), 0) FROM ciphertexts WHERE condition_id = ?1",
+            [&id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(internal)?;
+    body["ciphertext_count"] = json!(counts.0);
+    body["real_count"] = json!(counts.1);
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, batch_index, frozen_at, finalized_at, predecrypt_ms, finalize_ms
+             FROM batches WHERE condition_id = ?1 ORDER BY batch_index",
+        )
+        .map_err(internal)?;
+    let batches: Vec<Value> = stmt
+        .query_map([&id], |r| {
+            Ok(json!({
+                "batch_id": r.get::<_, i64>(0)?,
+                "batch_index": r.get::<_, i64>(1)?,
+                "frozen_at": r.get::<_, i64>(2)?,
+                "finalized_at": r.get::<_, Option<i64>>(3)?,
+                "predecrypt_ms": r.get::<_, Option<i64>>(4)?,
+                "finalize_ms": r.get::<_, Option<i64>>(5)?,
+            }))
+        })
+        .map_err(internal)?
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+    body["batches"] = json!(batches);
+    Ok(Json(body))
+}
+
+#[derive(Deserialize)]
+struct SubmitCiphertext {
+    condition_id: String,
+    sealed_blob_b64: String,
+}
+
+async fn submit_ciphertext(
+    State(app): State<App>,
+    Json(req): Json<SubmitCiphertext>,
+) -> Result<Json<Value>, ApiError> {
+    if req.sealed_blob_b64.len() > MAX_SEALED_BLOB * 4 / 3 + 8 {
+        return Err(bad_request("sealed blob too large"));
+    }
+    let blob = B64
+        .decode(&req.sealed_blob_b64)
+        .map_err(|_| bad_request("sealed_blob_b64 is not valid base64"))?;
+    if blob.len() > MAX_SEALED_BLOB {
+        return Err(bad_request("sealed blob too large"));
+    }
+    // Strict validation: parses, on-curve, subgroup-checked, payload cap.
+    let ct = SealedCiphertext::from_bytes(&blob)
+        .map_err(|e| bad_request(format!("invalid sealed ciphertext: {e}")))?;
+    let ct_hash = hex::encode(ct.hash());
+
+    let conn = app.0.db.lock().unwrap();
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM conditions WHERE id = ?1",
+            [&req.condition_id],
+            |r| r.get(0),
+        )
+        .map_err(|_| not_found("unknown condition"))?;
+    if status != "pending" {
+        return Err(bad_request(format!(
+            "condition is {status}; sealing is closed"
+        )));
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO ciphertexts (ct_hash, condition_id, sealed_blob, is_dummy, created_at)
+         VALUES (?1, ?2, ?3, 0, ?4)",
+        rusqlite::params![ct_hash, req.condition_id, blob, unix_now()],
+    )
+    .map_err(internal)?;
+    Ok(Json(json!({"ct_hash": ct_hash})))
+}
+
+#[derive(Deserialize)]
+struct WorkQuery {
+    operator: u16,
+}
+
+/// Frozen batches still missing a share from this operator, headers in
+/// position order (B * 48 bytes, base64).
+async fn get_work(
+    State(app): State<App>,
+    Query(q): Query<WorkQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = app.0.db.lock().unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT b.id, b.condition_id, b.batch_index, k.b
+             FROM batches b
+             JOIN conditions c ON c.id = b.condition_id
+             JOIN committees k ON k.id = c.committee_id
+             WHERE b.finalized_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM shares s
+                               WHERE s.batch_id = b.id AND s.operator_id = ?1)",
+        )
+        .map_err(internal)?;
+    let batch_rows: Vec<(i64, String, i64, i64)> = stmt
+        .query_map([q.operator], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })
+        .map_err(internal)?
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+
+    let mut batches = Vec::new();
+    for (batch_id, condition_id, batch_index, b) in batch_rows {
+        let lo = batch_index * b;
+        let hi = lo + b;
+        let mut stmt = conn
+            .prepare(
+                "SELECT sealed_blob FROM ciphertexts
+                 WHERE condition_id = ?1 AND position >= ?2 AND position < ?3
+                 ORDER BY position ASC",
+            )
+            .map_err(internal)?;
+        let blobs: Vec<Vec<u8>> = stmt
+            .query_map(rusqlite::params![condition_id, lo, hi], |r| r.get(0))
+            .map_err(internal)?
+            .collect::<Result<_, _>>()
+            .map_err(internal)?;
+        let mut headers = Vec::with_capacity(blobs.len() * 48);
+        for blob in &blobs {
+            let ct = SealedCiphertext::from_bytes(blob).map_err(internal)?;
+            headers.extend_from_slice(&header_to_bytes(&ct.header()));
+        }
+        batches.push(json!({
+            "batch_id": batch_id,
+            "condition_id": condition_id,
+            "b": b,
+            "headers_b64": B64.encode(&headers),
+        }));
+    }
+    Ok(Json(json!({"batches": batches})))
+}
+
+#[derive(Deserialize)]
+struct SubmitShare {
+    batch_id: i64,
+    operator_id: u16,
+    share_b64: String,
+}
+
+/// verify_share runs inline; rejected shares are stored flagged and never
+/// used for recovery.
+async fn submit_share(
+    State(app): State<App>,
+    Json(req): Json<SubmitShare>,
+) -> Result<Json<Value>, ApiError> {
+    let blob = B64
+        .decode(&req.share_b64)
+        .map_err(|_| bad_request("share_b64 is not valid base64"))?;
+    let share = Share::from_bytes(&blob).map_err(|e| bad_request(format!("invalid share: {e}")))?;
+    if share.party_index != req.operator_id {
+        return Err(bad_request("share party index does not match operator_id"));
+    }
+
+    // Load batch headers + committee for verification (read lock scope).
+    let (condition_id, committee_id, headers) = {
+        let conn = app.0.db.lock().unwrap();
+        let (condition_id, batch_index): (String, i64) = conn
+            .query_row(
+                "SELECT condition_id, batch_index FROM batches WHERE id = ?1 AND finalized_at IS NULL",
+                [req.batch_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| not_found("unknown or already finalized batch"))?;
+        let committee_id: String = conn
+            .query_row(
+                "SELECT committee_id FROM conditions WHERE id = ?1",
+                [&condition_id],
+                |r| r.get(0),
+            )
+            .map_err(internal)?;
+        let b: i64 = conn
+            .query_row(
+                "SELECT b FROM committees WHERE id = ?1",
+                [&committee_id],
+                |r| r.get(0),
+            )
+            .map_err(internal)?;
+        let existing: Option<i64> = conn
+            .query_row(
+                "SELECT verified FROM shares WHERE batch_id = ?1 AND operator_id = ?2",
+                rusqlite::params![req.batch_id, req.operator_id],
+                |r| r.get(0),
+            )
+            .ok();
+        if let Some(verified) = existing {
+            return Ok(Json(json!({"verified": verified != 0, "duplicate": true})));
+        }
+        let lo = batch_index * b;
+        let hi = lo + b;
+        let mut stmt = conn
+            .prepare(
+                "SELECT sealed_blob FROM ciphertexts
+                 WHERE condition_id = ?1 AND position >= ?2 AND position < ?3
+                 ORDER BY position ASC",
+            )
+            .map_err(internal)?;
+        let blobs: Vec<Vec<u8>> = stmt
+            .query_map(rusqlite::params![condition_id, lo, hi], |r| r.get(0))
+            .map_err(internal)?
+            .collect::<Result<_, _>>()
+            .map_err(internal)?;
+        let headers: Vec<bte_crypto::CtHeader> = blobs
+            .iter()
+            .map(|blob| SealedCiphertext::from_bytes(blob).map(|ct| ct.header()))
+            .collect::<Result<_, _>>()
+            .map_err(internal)?;
+        (condition_id, committee_id, headers)
+    };
+
+    let committee = app
+        .committee(&committee_id)
+        .ok_or_else(|| internal("committee not cached"))?;
+    let params = committee.params.clone();
+    let verified = tokio::task::spawn_blocking(move || verify_share(&params, &headers, &share))
+        .await
+        .map_err(internal)?;
+
+    {
+        let conn = app.0.db.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO shares (batch_id, operator_id, share_blob, verified, submitted_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![req.batch_id, req.operator_id, blob, verified as i64, now_ms()],
+        )
+        .map_err(internal)?;
+    }
+    if !verified {
+        tracing::warn!(
+            batch_id = req.batch_id,
+            operator = req.operator_id,
+            condition_id,
+            "rejected invalid share"
+        );
+    }
+    Ok(Json(json!({"verified": verified, "duplicate": false})))
+}
+
+/// 404 until the condition is revealed (invariant 4: no plaintext before
+/// reveal). After: plaintexts + per-operator share log + timings.
+async fn get_reveal(
+    State(app): State<App>,
+    Path(condition_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let conn = app.0.db.lock().unwrap();
+    let (revealed_at, payloads_json, merkle_root): (i64, String, String) = conn
+        .query_row(
+            "SELECT revealed_at, payloads_blob, merkle_root FROM reveals WHERE condition_id = ?1",
+            [&condition_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .map_err(|_| not_found("not revealed"))?;
+
+    let slots: Value = serde_json::from_str(&payloads_json).map_err(internal)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.batch_id, s.operator_id, s.verified, s.submitted_at
+             FROM shares s JOIN batches b ON b.id = s.batch_id
+             WHERE b.condition_id = ?1 ORDER BY s.submitted_at ASC",
+        )
+        .map_err(internal)?;
+    let share_log: Vec<Value> = stmt
+        .query_map([&condition_id], |r| {
+            Ok(json!({
+                "batch_id": r.get::<_, i64>(0)?,
+                "operator_id": r.get::<_, i64>(1)?,
+                "verified": r.get::<_, i64>(2)? != 0,
+                "submitted_at_ms": r.get::<_, i64>(3)?,
+            }))
+        })
+        .map_err(internal)?
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, batch_index, predecrypt_ms, finalize_ms FROM batches
+             WHERE condition_id = ?1 ORDER BY batch_index",
+        )
+        .map_err(internal)?;
+    let batches: Vec<Value> = stmt
+        .query_map([&condition_id], |r| {
+            Ok(json!({
+                "batch_id": r.get::<_, i64>(0)?,
+                "batch_index": r.get::<_, i64>(1)?,
+                "predecrypt_ms": r.get::<_, Option<i64>>(2)?,
+                "finalize_ms": r.get::<_, Option<i64>>(3)?,
+            }))
+        })
+        .map_err(internal)?
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+
+    Ok(Json(json!({
+        "condition_id": condition_id,
+        "revealed_at": revealed_at,
+        "merkle_root": merkle_root,
+        "slots": slots,
+        "shares": share_log,
+        "batches": batches,
+    })))
+}
+
+fn default_committee(app: &App) -> Option<String> {
+    let conn = app.0.db.lock().unwrap();
+    conn.query_row(
+        "SELECT id FROM committees ORDER BY created_at DESC, id LIMIT 1",
+        [],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+#[derive(Deserialize)]
+struct RegisterCommittee {
+    params_b64: String,
+}
+
+async fn register_committee(
+    State(app): State<App>,
+    Json(req): Json<RegisterCommittee>,
+) -> Result<Json<Value>, ApiError> {
+    let blob = B64
+        .decode(&req.params_b64)
+        .map_err(|_| bad_request("params_b64 is not valid base64"))?;
+    let id = app
+        .register_committee(&blob)
+        .map_err(|e| bad_request(format!("invalid params: {e}")))?;
+    Ok(Json(json!({"id": id})))
+}
+
+async fn list_committees(State(app): State<App>) -> Result<Json<Value>, ApiError> {
+    let conn = app.0.db.lock().unwrap();
+    let mut stmt = conn
+        .prepare("SELECT id, n, t, b, created_at FROM committees ORDER BY created_at DESC")
+        .map_err(internal)?;
+    let rows: Vec<Value> = stmt
+        .query_map([], |r| {
+            Ok(json!({
+                "id": r.get::<_, String>(0)?,
+                "n": r.get::<_, i64>(1)?,
+                "t": r.get::<_, i64>(2)?,
+                "b": r.get::<_, i64>(3)?,
+                "created_at": r.get::<_, i64>(4)?,
+            }))
+        })
+        .map_err(internal)?
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+    Ok(Json(json!({"committees": rows})))
+}
+
+#[derive(Serialize)]
+struct CommitteeDetail {
+    id: String,
+    n: i64,
+    t: i64,
+    b: i64,
+    params_b64: String,
+    params_digest: String,
+    created_at: i64,
+    trust_model: &'static str,
+}
+
+async fn get_committee(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<CommitteeDetail>, ApiError> {
+    let resolved = if id == "default" {
+        default_committee(&app).ok_or_else(|| not_found("no committee registered"))?
+    } else {
+        id
+    };
+    let conn = app.0.db.lock().unwrap();
+    conn.query_row(
+        "SELECT id, n, t, b, params_blob, created_at FROM committees WHERE id = ?1",
+        [&resolved],
+        |r| {
+            Ok(CommitteeDetail {
+                id: r.get(0)?,
+                n: r.get(1)?,
+                t: r.get(2)?,
+                b: r.get(3)?,
+                params_b64: B64.encode(r.get::<_, Vec<u8>>(4)?),
+                params_digest: r.get(0)?,
+                created_at: r.get(5)?,
+                trust_model: "v0: dealer-trusted setup. do not protect real value with this.",
+            })
+        },
+    )
+    .map(Json)
+    .map_err(|_| not_found("unknown committee"))
+}

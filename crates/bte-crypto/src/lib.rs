@@ -18,6 +18,15 @@ pub mod wire;
 /// depending on `rand` directly, so RNG trait versions can never diverge.
 pub use ark_std::rand;
 
+/// OS-entropy RNG matching simple-bte's rand version (works on native and
+/// wasm — getrandom picks the platform source).
+pub fn os_rng() -> impl rand::Rng {
+    use rand::SeedableRng;
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).expect("OS entropy unavailable");
+    rand_chacha::ChaCha20Rng::from_seed(seed)
+}
+
 use ark_bls12_381::{Bls12_381, Fr, G1Affine, G2Affine};
 use ark_std::rand::Rng;
 use sha2::{Digest, Sha256};

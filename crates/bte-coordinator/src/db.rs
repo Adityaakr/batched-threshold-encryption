@@ -1,0 +1,94 @@
+//! Sqlite persistence. Schema per spec/index.md section 7.
+
+use anyhow::Result;
+use rusqlite::Connection;
+
+pub const SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS committees (
+    id            TEXT PRIMARY KEY,          -- hex params digest
+    params_blob   BLOB NOT NULL,
+    params_digest TEXT NOT NULL,
+    n             INTEGER NOT NULL,
+    t             INTEGER NOT NULL,
+    b             INTEGER NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS conditions (
+    id           TEXT PRIMARY KEY,
+    committee_id TEXT NOT NULL REFERENCES committees(id),
+    kind         TEXT NOT NULL,              -- at_time | at_block
+    fires_at     INTEGER,                    -- unix seconds (at_time)
+    chain_id     INTEGER,                    -- at_block
+    height       INTEGER,                    -- at_block
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending|frozen|revealed|stalled
+    created_at   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ciphertexts (
+    ct_hash      TEXT PRIMARY KEY,
+    condition_id TEXT NOT NULL REFERENCES conditions(id),
+    sealed_blob  BLOB NOT NULL,
+    is_dummy     INTEGER NOT NULL DEFAULT 0,
+    position     INTEGER,                    -- global position, set at freeze
+    created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cts_condition ON ciphertexts(condition_id);
+CREATE TABLE IF NOT EXISTS batches (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    condition_id  TEXT NOT NULL REFERENCES conditions(id),
+    batch_index   INTEGER NOT NULL,          -- 0-based within the condition
+    frozen_at     INTEGER NOT NULL,
+    finalized_at  INTEGER,
+    predecrypt_ms INTEGER,
+    finalize_ms   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_batches_condition ON batches(condition_id);
+CREATE TABLE IF NOT EXISTS shares (
+    batch_id     INTEGER NOT NULL REFERENCES batches(id),
+    operator_id  INTEGER NOT NULL,
+    share_blob   BLOB NOT NULL,
+    verified     INTEGER NOT NULL,
+    submitted_at INTEGER NOT NULL,
+    PRIMARY KEY (batch_id, operator_id)
+);
+CREATE TABLE IF NOT EXISTS batch_slots (
+    batch_id   INTEGER PRIMARY KEY REFERENCES batches(id),
+    slots_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reveals (
+    condition_id  TEXT PRIMARY KEY REFERENCES conditions(id),
+    revealed_at   INTEGER NOT NULL,
+    payloads_blob TEXT NOT NULL,             -- JSON slot array
+    merkle_root   TEXT NOT NULL
+);
+"#;
+
+pub fn open(path: &str) -> Result<Connection> {
+    let conn = if path == ":memory:" {
+        Connection::open_in_memory()?
+    } else {
+        Connection::open(path)?
+    };
+    conn.pragma_update(None, "journal_mode", "WAL").ok();
+    conn.pragma_update(None, "busy_timeout", 5000)?;
+    conn.execute_batch(SCHEMA)?;
+    Ok(conn)
+}
+
+/// Parse DATABASE_URL: `sqlite://path` or a bare path.
+pub fn path_from_url(url: &str) -> String {
+    url.strip_prefix("sqlite://").unwrap_or(url).to_string()
+}
+
+pub fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before 1970")
+        .as_secs() as i64
+}
+
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before 1970")
+        .as_millis() as i64
+}

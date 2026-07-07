@@ -1,16 +1,20 @@
-// The protocol reference, written as a self-contained article: the problem,
-// the lifecycle, the cryptography (punctured setup, shares, pipelined
-// recovery, the commitment), private seals, architecture, integration,
-// production posture and the trust model. Every claim traces to spec/index.md
-// or the coordinator/SDK code. docs/protocol.html carries the same spine.
+// The protocol reference as an editorial article: warm cards for formulas
+// and tables, a dark code card, clean comparison/state/architecture
+// diagrams. Same content spine as docs/protocol.html; every claim traces to
+// spec/index.md or the coordinator/SDK code. Keep both in sync.
 const sections = [
   ['overview', 'overview'],
   ['problem', 'the problem'],
+  ['compare', 'alternatives'],
   ['lifecycle', 'lifecycle'],
-  ['cryptography', 'cryptography'],
+  ['engine', 'engine'],
+  ['crypto', 'cryptography'],
+  ['ceremony', 'ceremony'],
   ['privacy', 'private seals'],
   ['architecture', 'architecture'],
+  ['byzantine', 'byzantine drill'],
   ['integration', 'building on it'],
+  ['numbers', 'numbers'],
   ['production', 'production'],
   ['trust', 'trust model'],
 ] as const;
@@ -21,19 +25,21 @@ export function renderProtocol(root: HTMLElement): () => void {
   root.innerHTML = `
     <article class="protocol-article">
       <header id="overview">
-        <p class="kicker">Peal protocol reference, v0</p>
-        <h1>your users commit. the network reveals.</h1>
+        <p class="kicker">Peal protocol reference · v0</p>
+        <h1>your users commit.<br>the network reveals.</h1>
         <p class="lede">Peal is a programmable encryption network for information that must stay
         unreadable until a shared condition fires. A browser seals a payload once. A threshold
         committee later opens the whole batch, publicly and verifiably. Nobody returns for a
-        second reveal transaction. This page explains how that works at the protocol level, how
-        to build on it, and what separates today's devnet from production.</p>
+        second reveal transaction. This article walks the protocol end to end: the cryptography
+        that makes early reading impossible, the machinery that makes the reveal guaranteed, how
+        to build on it, and exactly what separates today's devnet from production.</p>
         <div class="facts" aria-label="protocol defaults">
           <div><span>committee</span><strong>n = 5</strong></div>
           <div><span>threshold</span><strong>t = 3</strong></div>
           <div><span>fixed batch</span><strong>B = 64</strong></div>
           <div><span>crypto overhead</span><strong>64 bytes</strong></div>
           <div><span>share size</span><strong>48 bytes</strong></div>
+          <div><span>stall timeout</span><strong>120 s</strong></div>
         </div>
       </header>
 
@@ -44,15 +50,99 @@ export function renderProtocol(root: HTMLElement): () => void {
       <section>
         <h2 id="problem">the problem</h2>
         <p>Commit-reveal is the standard way to hide information on a public ledger until a
-        deadline: users post a hash now and the preimage later. Its failure mode is the second
-        step. The bidder who lost never opens their commitment. The voter who changed their mind
-        never reveals. Every application built on the pattern inherits reveal deadlines, griefing
-        margins, and incomplete data, because revealing is voluntary.</p>
-        <p>Peal removes the second step. The payload is encrypted, not hashed, and decryption is
-        a network duty rather than a user choice. Before the cue, fewer than
-        <span class="mono">t</span> committee operators can recover nothing. After the cue, any
-        <span class="mono">t</span> valid shares recover every slot in the frozen batch. The
-        user's only action is the seal.</p>
+        deadline: users post a hash now and the preimage later. The pattern is sound cryptography
+        wrapped around a broken assumption, that people will come back. The bidder who lost never
+        opens their commitment, and the auction cannot distinguish a griefing bidder from a
+        crashed one. The voter who saw the early tally shift never reveals. The game player whose
+        move became bad simply forfeits the reveal and eats a smaller penalty than the move would
+        have cost.</p>
+        <p>Every application built on voluntary reveal inherits the same design tax: reveal
+        windows and their timeout parameters, slashing deposits sized to guess at the value of
+        hiding, incomplete datasets, and a support queue of users who missed their window
+        honestly. The failure is structural. If revealing is a user action, the user can decline
+        it exactly when declining matters most.</p>
+
+        <figure>
+          <svg class="diagram" viewBox="0 0 860 460" role="img" aria-label="Comparison: ordinary commit-reveal makes the reveal a user action that can be abandoned; Peal makes the reveal a network duty performed by a threshold committee">
+            <text x="215" y="44" text-anchor="middle" font-size="26" class="serif" fill="#1f2430">commit-reveal</text>
+            <text x="215" y="70" text-anchor="middle" font-size="14" class="m" fill="#2563eb">reveal is a user action</text>
+            <rect x="80" y="94" width="270" height="56" rx="12" fill="#dbe7f8" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="215" y="127" text-anchor="middle" font-size="15.5" font-weight="500" fill="#1f2430">user posts hash(bid, salt)</text>
+            <path d="M215 150 L215 176" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M209 168 L215 178 L221 168" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="80" y="180" width="270" height="56" rx="12" fill="#e6dff5" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="215" y="207" text-anchor="middle" font-size="15.5" font-weight="500" fill="#1f2430">deadline passes</text>
+            <text x="215" y="226" text-anchor="middle" font-size="12.5" fill="#6b7280">everyone waits</text>
+            <path d="M215 236 L215 262" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M209 254 L215 264 L221 254" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="80" y="266" width="270" height="66" rx="12" fill="#f6eec6" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="215" y="294" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1f2430">user must return and reveal</text>
+            <text x="215" y="314" text-anchor="middle" font-size="12.5" fill="#6b7280">a second transaction, voluntarily</text>
+            <path d="M215 332 L215 358" stroke="#1f2937" stroke-width="1.5" stroke-dasharray="5 4"/>
+            <path d="M209 350 L215 360 L221 350" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="80" y="362" width="270" height="66" rx="12" fill="#fbe3df" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="215" y="390" text-anchor="middle" font-size="15.5" font-weight="500" fill="#1f2430">or they simply do not</text>
+            <text x="215" y="410" text-anchor="middle" font-size="12.5" fill="#6b7280">unopened commitments break the app</text>
+            <line x1="430" y1="30" x2="430" y2="436" stroke="#e7e2d9" stroke-width="1.5"/>
+            <text x="645" y="44" text-anchor="middle" font-size="26" class="serif" fill="#1f2430">Peal</text>
+            <text x="645" y="70" text-anchor="middle" font-size="14" class="m" fill="#16a34a">reveal is a network duty</text>
+            <rect x="510" y="94" width="270" height="56" rx="12" fill="#f1f0ee" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="645" y="122" text-anchor="middle" font-size="15.5" font-weight="500" fill="#1f2430">user seals ciphertext, once</text>
+            <text x="645" y="141" text-anchor="middle" font-size="12.5" fill="#6b7280">encrypted in the browser, in wasm</text>
+            <path d="M645 150 L645 176" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M639 168 L645 178 L651 168" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="510" y="180" width="270" height="66" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.8"/>
+            <text x="645" y="208" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1f2430">the cue fires</text>
+            <text x="645" y="228" text-anchor="middle" font-size="12.5" fill="#6b7280">wall clock or block height, batch freezes</text>
+            <path d="M645 246 L645 272" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M639 264 L645 274 L651 264" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="510" y="276" width="270" height="86" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.8"/>
+            <text x="645" y="306" text-anchor="middle" font-size="15.5" font-weight="700" fill="#1f2430">the committee reveals the batch</text>
+            <text x="645" y="326" text-anchor="middle" font-size="12.5" fill="#6b7280">any t of n shares, publicly verified</text>
+            <text x="645" y="345" text-anchor="middle" font-size="12.5" fill="#6b7280">every slot opens, including losers</text>
+            <text x="645" y="398" text-anchor="middle" font-size="13" class="m" fill="#6b7280">no second transaction exists</text>
+            <text x="645" y="418" text-anchor="middle" font-size="13" class="m" fill="#6b7280">(nothing for the user to abandon)</text>
+          </svg>
+          <figcaption>The structural difference: commit-reveal ends in a step the user can skip.
+          Peal has no such step.</figcaption>
+        </figure>
+
+        <p>Peal removes the action. The payload is encrypted rather than hashed, and decryption
+        is a network duty rather than a user choice. Before the cue, fewer than
+        <span class="mono">t</span> committee operators can recover nothing, and that includes
+        the coordinator that stores the ciphertexts. After the cue, any
+        <span class="mono">t</span> valid shares recover every slot in the frozen batch at once.
+        The user's only action is the seal.</p>
+      </section>
+
+      <section>
+        <h2 id="compare">why threshold, not the alternatives</h2>
+        <p>Guaranteed reveal has three other known constructions. Each carries a cost Peal was
+        built to avoid, and each has real uses; the table is a scoping tool, not a dismissal.</p>
+        <div class="tcard">
+          <table>
+            <thead><tr><th>approach</th><th>how it reveals</th><th>the catch</th></tr></thead>
+            <tbody>
+              <tr><td>timelock / VDF</td><td>anyone grinds sequential computation until the
+              plaintext falls out</td><td>the deadline is denominated in compute, not clock
+              time; someone must actually run the grind, and faster hardware moves the
+              deadline</td></tr>
+              <tr><td>TEE-held keys</td><td>an enclave releases the key at the
+              deadline</td><td>the guarantee is the vendor's attestation chain; one enclave
+              break is a total, silent compromise</td></tr>
+              <tr><td>naked threshold</td><td>a committee decrypts each ciphertext on
+              request</td><td>per-ciphertext work: n operators each touch every message, which
+              is exactly what kills throughput at batch sizes that matter</td></tr>
+              <tr><td>peal (batched)</td><td>a committee posts one constant-size share per
+              operator per batch</td><td>batches are fixed at B slots and a threshold of
+              operators must be live; the v0 ceremony still has a trusted dealer</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The batching is the point. One 48-byte share per operator opens up to 64 payloads, so
+        the committee's work per reveal is constant while the batch fills. Wall-clock deadlines
+        stay wall-clock. And every share is publicly verifiable against published keys, so a
+        lying operator is caught by arithmetic, not by reputation.</p>
       </section>
 
       <section>
@@ -61,36 +151,38 @@ export function renderProtocol(root: HTMLElement): () => void {
           <li><div>
             <h3>fetch committee parameters</h3>
             <p>The SDK downloads the public parameters, checks their SHA-256 digest, and caches
-            them. The parameter set fixes n, t and B for the committee's lifetime.</p>
+            them. The parameter set fixes n, t and B for the committee's lifetime, and the wasm
+            module re-parses it independently, so a tampered parameter blob fails twice.</p>
             <span class="api">GET /v0/committees/:id</span>
           </div></li>
           <li><div>
             <h3>seal in the browser</h3>
             <p>Wasm runs the Fujisaki-Okamoto transform locally. Only the sealed wire bytes ever
-            leave the device; for a short text payload that is about 110 bytes total.</p>
+            leave the device; for a short text payload that is about 110 bytes total. The
+            plaintext never exists outside the tab that typed it.</p>
             <span class="api">seal(payload, conditionId)</span>
           </div></li>
           <li><div>
             <h3>content-address the ciphertext</h3>
             <p>The coordinator parses the wire format, enforces the payload cap, computes
-            ct_hash = sha256(wire), and stores the blob under its condition. Submission order
-            does not choose the slot.</p>
+            ct_hash = sha256(wire), and stores the blob under its condition. The hash is the
+            stable handle an application keeps; submission order does not choose the slot.</p>
             <span class="api">POST /v0/ciphertexts</span>
           </div></li>
           <li><div>
             <h3>the cue fires, the batch freezes</h3>
-            <p>A wall-clock or block-height condition fires. The coordinator pads to 64 slots,
-            sorts every ciphertext by hash, assigns positions, and makes the batch immutable.
-            Positions are a pure function of the ciphertext set, so any party can reproduce
-            them.</p>
+            <p>A wall-clock or block-height condition fires. The coordinator pads to 64 slots
+            with self-sealed dummies, sorts every ciphertext by hash, assigns positions, and
+            makes the batch immutable. Positions are a pure function of the ciphertext set: two
+            coordinators given the same seals produce the same board.</p>
             <span class="api">pending &rarr; frozen</span>
           </div></li>
           <li><div>
             <h3>operators post one share each</h3>
-            <p>Each outbound-only node polls for frozen work and computes one 48-byte partial for
-            the entire batch. The share is the same size whether the batch holds one real seal or
-            sixty-four.</p>
-            <span class="api">POST /v0/shares</span>
+            <p>Each outbound-only node polls for frozen work, decrypts its local keystore, and
+            computes one 48-byte partial for the entire batch. The share is the same size
+            whether the batch holds one real seal or sixty-four.</p>
+            <span class="api">GET /v0/work &middot; POST /v0/shares</span>
           </div></li>
           <li><div>
             <h3>verify, combine, recover</h3>
@@ -102,25 +194,72 @@ export function renderProtocol(root: HTMLElement): () => void {
           <li><div>
             <h3>publish an auditable record</h3>
             <p>The reveal carries every slot, its validity bit, the full operator share log with
-            timings, and a merkle root over position and payload. Anyone can recompute the
-            root.</p>
+            timings, and a merkle root over position and payload. Anyone can recompute the root
+            from the published batch.</p>
             <span class="api">GET /v0/reveals/:id</span>
           </div></li>
         </ol>
+
+        <figure>
+          <svg class="diagram" viewBox="0 0 820 210" role="img" aria-label="Condition lifecycle: pending accepts seals, the cue freezes the batch, t valid shares reveal it; a timeout without t shares stalls the condition until a late share completes it">
+            <rect x="24" y="42" width="180" height="66" rx="12" fill="#dbe7f8" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="114" y="70" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2430">pending</text>
+            <text x="114" y="91" text-anchor="middle" font-size="12.5" fill="#6b7280">accepting seals</text>
+            <path d="M204 75 L268 75" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M260 69 L270 75 L260 81" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="237" y="62" text-anchor="middle" font-size="12.5" class="m" fill="#2563eb">cue fires</text>
+            <rect x="272" y="42" width="180" height="66" rx="12" fill="#f1f0ee" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="362" y="70" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2430">frozen</text>
+            <text x="362" y="91" text-anchor="middle" font-size="12.5" fill="#6b7280">collecting shares</text>
+            <path d="M452 75 L516 75" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M508 69 L518 75 L508 81" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="485" y="62" text-anchor="middle" font-size="12.5" class="m" fill="#2563eb">t valid shares</text>
+            <rect x="520" y="42" width="196" height="66" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.8"/>
+            <text x="618" y="70" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2430">revealed</text>
+            <text x="618" y="91" text-anchor="middle" font-size="12.5" fill="#6b7280">immutable, auditable</text>
+            <path d="M362 108 L362 146 L410 146" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+            <path d="M402 140 L412 146 L402 152" fill="none" stroke="#dc2626" stroke-width="1.5"/>
+            <text x="284" y="140" text-anchor="middle" font-size="12" fill="#6b7280">fewer than t in 120 s</text>
+            <rect x="414" y="120" width="196" height="52" rx="12" fill="#fbe3df" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="512" y="151" text-anchor="middle" font-size="14.5" font-weight="500" fill="#1f2430">stalled</text>
+            <path d="M610 146 C660 146, 660 112, 630 108" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+            <path d="M640 104 L628 108 L638 116" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+            <text x="702" y="150" text-anchor="middle" font-size="12" class="m" fill="#16a34a">one late valid share</text>
+          </svg>
+          <figcaption>The condition state machine. Stalled is honest, not terminal: a late valid
+          share resumes recovery, and a condition is never falsely revealed.</figcaption>
+        </figure>
       </section>
 
       <section>
-        <h2 id="cryptography">the cryptography</h2>
+        <h2 id="engine">the condition engine</h2>
+        <p>The coordinator's scheduler is a 500 ms tick loop, not a callback registry. Each pass
+        it freezes any pending wall-clock condition whose time has come, polls configured RPC
+        endpoints with <span class="mono">eth_blockNumber</span> for block-height conditions,
+        finalizes any frozen batch that has reached t verified shares, and marks conditions
+        stalled when the reveal timeout (default 120 seconds,
+        <span class="mono">REVEAL_TIMEOUT_SECS</span>) passes without them.</p>
+        <p>Two properties matter more than the loop itself. Freezing is deterministic: positions
+        derive from sorting ciphertext hashes, so the frozen board is reproducible by anyone
+        holding the ciphertext set, and an integration test asserts two coordinators agree. And
+        every step is idempotent against restart: state reloads from the database, the expensive
+        cross-terms are recomputed rather than trusted from cache, and operator nodes simply
+        repoll. Killing the coordinator mid-reveal delays the reveal; it cannot corrupt it.</p>
+      </section>
+
+      <section>
+        <h2 id="crypto">the cryptography</h2>
         <p>Peal wraps Commonware's batched threshold encryption
-        (<a class="link" href="https://eprint.iacr.org/2026/760" target="_blank" rel="noopener">eprint 2026/760</a>,
-        implemented in
+        (<a class="link" href="https://eprint.iacr.org/2026/760" target="_blank" rel="noopener">eprint 2026/760</a>
+        by Guru Vamsi Policharla, implemented in
         <a class="link" href="https://github.com/commonwarexyz/simple-bte" target="_blank" rel="noopener">simple-bte</a>)
         without modifying the scheme. The wrapper adds conditions, persistence, operator
-        transport, share verification, and public records.</p>
+        transport, share verification, and public records. Nothing below is novel cryptography;
+        that is deliberate.</p>
 
         <h3>the wire format</h3>
-        <p>A sealed ciphertext is a fixed header and a masked body. The cryptographic overhead is
-        64 bytes: a 48-byte KEM header and a 16-byte key mask.</p>
+        <p>A sealed ciphertext is a fixed header and a masked body. The cryptographic overhead
+        is 64 bytes: a 48-byte KEM header and a 16-byte key mask. Framing adds 9 more.</p>
         <div class="eq">
           <div><span>magic + type</span><code>"BTE0" || 0x01, 5 bytes</code></div>
           <div><span>KEM header</span><code>ct&#8320; = [k]&#8321;, 48 bytes compressed G1</code></div>
@@ -128,9 +267,11 @@ export function renderProtocol(root: HTMLElement): () => void {
           <div><span>masked body</span><code>ct&#8322; = H&#8344;(K) xor payload</code></div>
           <div><span>integrity</span><code>k = H&#7523;(K, payload), verify [k]&#8321; = ct&#8320;</code></div>
         </div>
-        <p>The last line is the Fujisaki-Okamoto trick: the ephemeral scalar is re-derived from
-        the recovered plaintext, so a ciphertext that was tampered with fails to reproduce its
-        own header and is flagged corrupt in its slot without poisoning the rest of the batch.</p>
+        <p>The last line is the Fujisaki-Okamoto discipline that makes the scheme non-malleable
+        in practice: the ephemeral scalar is not random at decryption time, it is re-derived
+        from the recovered plaintext. A ciphertext anyone tampered with recovers to a plaintext
+        whose re-derived scalar fails to reproduce the KEM header, so the slot is flagged
+        corrupt and quarantined without poisoning the other 63.</p>
 
         <h3>the punctured setup</h3>
         <p>The ceremony publishes powers of a secret <span class="mono">&tau;</span> with one
@@ -142,40 +283,46 @@ export function renderProtocol(root: HTMLElement): () => void {
           <div><span>dealt to operators</span><code>Shamir shares of &tau;&sup1; &hellip; &tau;<sup>B</sup>, threshold t of n</code></div>
           <div><span>per-operator public</span><code>verification values v&#7522;&#690;</code></div>
         </div>
-        <p>Sealing masks the payload key with
-        <span class="mono">[k &middot; &tau;<sup>B+1</sup>]&#8348;</span>, a value no single party
-        can compute: the power exists only in the target group and its preimage was destroyed at
-        setup (in v0, that destruction is the dealer's promise; see the trust model). Recovering
-        it for a batch requires cross-terms from the published powers combined with t operator
-        shares of the lower powers. This is also why every batch is exactly B slots: the setup
-        material and the FFT domain are sized to B at the ceremony, so short batches are padded
-        with self-sealed dummies rather than shrinking the math.</p>
+        <p>Why it works, in one paragraph. Sealing masks the payload key with
+        <span class="mono">[k &middot; &tau;<sup>B+1</sup>]&#8348;</span>. That value lives in
+        the pairing's target group, where you cannot climb from
+        <span class="mono">[&tau;<sup>j</sup>]</span> to
+        <span class="mono">[&tau;<sup>j+1</sup>]</span>; the one power that would let you compute
+        it directly was zeroed out of the published set, and its preimage was destroyed at setup
+        (in v0, that destruction is the dealer's promise; see the trust model). What the batch
+        structure buys is a way to route around the hole: pairing each ciphertext header against
+        the right published powers produces cross-terms in which the unknown power appears only
+        multiplied by the operators' secret-shared low powers. Add t operators' contributions
+        and the unknown cancels into something computable; with fewer than t, it is still hidden
+        behind Shamir secrecy. The published powers run to 2B precisely so those cross-terms
+        exist for every slot position.</p>
+        <p>This is also why every batch is exactly B slots. The setup material and the FFT
+        domain are sized to B at the ceremony; a batch of three cannot be decrypted, so the
+        coordinator pads with self-sealed dummies rather than shrinking the math.</p>
 
         <h3>shares and public verification</h3>
-        <div class="cols">
-          <div>
-            <p class="mono" style="font-size:15px">pd&#11388; = &Sigma;&#7522; &sigma;&#11388;&#7522; &middot; ct&#7522;,&#8320;</p>
-            <p class="muted" style="font-size:14.5px">Operator j runs one multi-scalar
-            multiplication over the frozen headers. The result is a single compressed G1 point,
-            48 bytes, covering the whole batch.</p>
-          </div>
-          <div>
-            <p class="mono" style="font-size:15px">e(pd&#11388;, g&#8322;) = &Pi;&#7522; e(ct&#7522;,&#8320;, v&#11388;&#7522;)</p>
-            <p class="muted" style="font-size:14.5px">The coordinator checks each partial against
-            public verification keys. A forged share is attributable, recorded as rejected, and
-            never counts toward the threshold.</p>
-          </div>
+        <div class="eq">
+          <div><span>operator's share</span><code>pd&#11388; = &Sigma;&#7522; &sigma;&#11388;&#7522; &middot; ct&#7522;,&#8320;</code></div>
+          <div><span>public check</span><code>e(pd&#11388;, g&#8322;) = &Pi;&#7522; e(ct&#7522;,&#8320;, v&#11388;&#7522;)</code></div>
+          <div><span>recovery</span><code>Lagrange-combine any t valid shares at x = 0</code></div>
         </div>
+        <p>Operator j runs one multi-scalar multiplication over the frozen headers; the result
+        is a single compressed G1 point, 48 bytes, covering the whole batch. The coordinator
+        checks each partial against public verification keys before it counts: a forged share
+        fails the pairing equation, is recorded as rejected under the operator's identity, and
+        never reaches the threshold. Verification needs no secrets, so anyone can re-run it.</p>
 
         <h3>pipelined recovery</h3>
         <p>The expensive part of decryption does not wait for operators. The FFT cross-terms
-        (<span class="mono">O(B log B)</span> group operations plus <span class="mono">O(B)</span>
-        pairings) depend only on the frozen ciphertexts and the public parameters, so they
-        compute at freeze time while shares are still in flight; an integration test asserts
-        pre-decrypt finishes before the first share exists. When t verified shares land, finalize
-        is one Lagrange interpolation at x = 0 plus the per-slot FO re-check. On the public
-        devnet, pre-decrypt runs in roughly 250 ms and finalize in 40 to 150 ms for a full
-        64-slot batch.</p>
+        (<span class="mono">O(B log B)</span> group operations plus
+        <span class="mono">O(B)</span> pairings, never the naive <span class="mono">B&sup2;</span>
+        loop) depend only on the frozen ciphertexts and the public parameters, so they compute
+        at freeze time while shares are still in flight; an integration test asserts pre-decrypt
+        finishes before the first share exists. When t verified shares land, finalize is one
+        Lagrange interpolation at <span class="mono">x = 0</span> plus the per-slot FO re-check.
+        On the public devnet, pre-decrypt runs in roughly 250 ms and finalize in 40 to 150 ms
+        for a full 64-slot batch, so the user-visible gap between cue and plaintext is the share
+        round-trip, not the math.</p>
 
         <h3>the commitment</h3>
         <div class="eq">
@@ -185,16 +332,40 @@ export function renderProtocol(root: HTMLElement): () => void {
         </div>
         <p>The merkle root binds every slot, padding included, so a published reveal cannot be
         edited without detection. Padding slots are real self-sealed ciphertexts with a tagged
-        random payload. Anyone can download the batch from the reveal endpoint, recompute the
-        root, and compare it with the published or onchain-anchored value.</p>
+        random payload, unique per batch, and operators do identical work on them, so the
+        padding is not a shortcut. Anyone can download the batch from the reveal endpoint,
+        recompute the root, and compare it with the published or onchain-anchored value.</p>
+      </section>
+
+      <section>
+        <h2 id="ceremony">the ceremony and the keys</h2>
+        <p>v0 key generation is a single offline dealer running
+        <span class="mono">simple-bte::crs::setup</span>: it samples
+        <span class="mono">&tau;</span>, computes the punctured public parameters, Shamir-deals
+        the shares of each power to the n operators, writes each share into a
+        password-encrypted keystore (argon2id key derivation, ChaCha20-Poly1305 sealing),
+        publishes the parameter blob, and destroys <span class="mono">&tau;</span>. The
+        parameter set is content-addressed: its SHA-256 digest is the committee id, which is why
+        an application can pin one committee and reject every other.</p>
+        <p>Operator nodes never hand their keystores to anyone. A node decrypts its keystore
+        locally at startup, holds the share in memory, and speaks only outbound HTTP to the
+        coordinator. The coordinator cannot reach into a node, and a stolen coordinator database
+        contains ciphertexts and public data, not key material.</p>
+        <p>The dealer is the v0 compromise, stated plainly: whoever ran the ceremony could have
+        kept <span class="mono">&tau;</span> and could decrypt everything early. That is
+        acceptable for a devnet and unacceptable for value. The production replacement is a
+        distributed key generation in which the trapdoor never exists on any single machine,
+        plus proactive resharing so operators can rotate without changing the public key
+        applications pinned.</p>
       </section>
 
       <section>
         <h2 id="privacy">two privacy layers</h2>
         <p><strong>The network proves when. The link decides who.</strong> Threshold reveal is
-        deliberately public: after the cue, every slot's plaintext is on the record so anyone can
-        verify the batch. That is exactly right for auctions and votes, and wrong for a personal
-        note, so a second, purely client-side layer exists on top.</p>
+        deliberately public: after the cue, every slot's plaintext is on the record so anyone
+        can verify the batch. That is exactly right for auctions and votes, whose fairness
+        depends on every participant reading the same reveal, and wrong for a personal note. So
+        a second, purely client-side layer exists on top.</p>
         <div class="eq">
           <div><span>private payload</span><code>"BTEP1" || iv (12 bytes) || AES-128-GCM(key, text)</code></div>
           <div><span>share link</span><code>#/s/&lt;condition&gt;/&lt;ct_hash&gt;/&lt;key&gt;</code></div>
@@ -203,8 +374,9 @@ export function renderProtocol(root: HTMLElement): () => void {
         reaches any server: it rides only in the share link's hash fragment, which browsers do
         not transmit. The network still proves when the seal opened; only people holding the
         full link learn what it said. The explorer marks such slots private instead of printing
-        ciphertext. The trade is explicit: there is no recovery path. Lose every copy of the
-        link and the content stays unreadable, by construction.</p>
+        ciphertext, and a link that lost its key segment gets a clear error rather than garbage.
+        The trade is explicit: there is no recovery path. Lose every copy of the link and the
+        content stays unreadable, by construction.</p>
       </section>
 
       <section>
@@ -215,101 +387,140 @@ export function renderProtocol(root: HTMLElement): () => void {
         keystores.</p>
 
         <figure>
-          <svg viewBox="0 0 720 380" width="100%" role="img" aria-label="Peal architecture: dapp with SDK sends ciphertext through a TLS edge to the coordinator, which persists state, exchanges work and shares with five outbound-only operator nodes, and optionally anchors the reveal root onchain" font-family="Satoshi, system-ui, sans-serif">
-            <defs>
-              <marker id="parr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-                <path d="M0 0.5 L7.5 4 L0 7.5" fill="none" stroke="#6b7280" stroke-width="1.3"/>
-              </marker>
-            </defs>
-            <rect x="12" y="30" width="150" height="72" rx="10" fill="#eff6ff" stroke="#2563eb"/>
-            <text x="87" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#111827">dapp + SDK</text>
-            <text x="87" y="78" text-anchor="middle" font-size="11.5" fill="#6b7280">seals in wasm</text>
-            <rect x="222" y="30" width="150" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
-            <text x="297" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#111827">TLS edge</text>
-            <text x="297" y="78" text-anchor="middle" font-size="11.5" fill="#6b7280">explorer, rate limit</text>
-            <rect x="432" y="30" width="170" height="72" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.5"/>
-            <text x="517" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="#111827">coordinator</text>
-            <text x="517" y="78" text-anchor="middle" font-size="11.5" fill="#6b7280">freeze, verify, recover</text>
-            <rect x="432" y="146" width="170" height="56" rx="10" fill="#f8fafc" stroke="#e5e7eb"/>
-            <text x="517" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">database</text>
-            <text x="517" y="188" text-anchor="middle" font-size="11.5" fill="#6b7280">ciphertexts + reveals</text>
-            <rect x="222" y="146" width="150" height="56" rx="10" fill="#fff" stroke="#e5e7eb" stroke-dasharray="4 3"/>
-            <text x="297" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#111827">onchain anchor</text>
-            <text x="297" y="188" text-anchor="middle" font-size="11.5" fill="#6b7280">optional, reveal root</text>
+          <svg class="diagram" viewBox="0 0 884 470" role="img" aria-label="Peal architecture: a dapp with the SDK seals in wasm and sends ciphertext through a TLS edge to the coordinator, which persists ciphertexts and reveals in a volume-backed database, optionally anchors the reveal root onchain, and exchanges work and 48-byte shares with five outbound-only operator nodes">
+            <rect x="30" y="40" width="200" height="72" rx="12" fill="#dbe7f8" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="130" y="71" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2430">dapp + SDK</text>
+            <text x="130" y="93" text-anchor="middle" font-size="12.5" fill="#6b7280">seals in wasm</text>
+            <path d="M230 76 L302 76" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M294 70 L304 76 L294 82" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="267" y="62" text-anchor="middle" font-size="11" class="m" fill="#6b7280">ciphertext</text>
+            <rect x="306" y="40" width="200" height="72" rx="12" fill="#f1f0ee" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="406" y="71" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2430">TLS edge</text>
+            <text x="406" y="93" text-anchor="middle" font-size="12.5" fill="#6b7280">explorer + rate limit</text>
+            <path d="M506 76 L578 76" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M570 70 L580 76 L570 82" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="543" y="63" text-anchor="middle" font-size="12" class="m" fill="#6b7280">/v0</text>
+            <rect x="582" y="36" width="240" height="80" rx="12" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+            <text x="702" y="69" text-anchor="middle" font-size="17" font-weight="700" fill="#1f2430">coordinator</text>
+            <text x="702" y="92" text-anchor="middle" font-size="12.5" fill="#6b7280">freeze &middot; verify &middot; recover</text>
+            <path d="M702 116 L702 160" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M696 152 L702 162 L708 152" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <rect x="582" y="164" width="240" height="66" rx="12" fill="#f1f0ee" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="702" y="192" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2430">database + volume</text>
+            <text x="702" y="213" text-anchor="middle" font-size="12.5" fill="#6b7280">ciphertexts &middot; reveals</text>
+            <path d="M578 197 L474 197" stroke="#1f2937" stroke-width="1.5"/>
+            <path d="M482 191 L472 197 L482 203" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+            <text x="526" y="184" text-anchor="middle" font-size="12" class="m" fill="#6b7280">root</text>
+            <rect x="268" y="164" width="200" height="66" rx="12" fill="#f6eec6" stroke="#1f2937" stroke-width="1.5" stroke-dasharray="6 5"/>
+            <text x="368" y="192" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2430">onchain anchor</text>
+            <text x="368" y="213" text-anchor="middle" font-size="12.5" fill="#6b7280">optional &middot; reveal root</text>
+            <rect x="30" y="292" width="792" height="146" rx="14" fill="none" stroke="#e7e2d9" stroke-width="1.5"/>
+            <text x="52" y="322" font-size="13" class="m" fill="#16a34a">the committee &middot; any 3 of 5 reveal</text>
             <g>
-              <rect x="80" y="272" width="104" height="66" rx="10" fill="#fff" stroke="#e5e7eb"/>
-              <rect x="204" y="272" width="104" height="66" rx="10" fill="#fff" stroke="#e5e7eb"/>
-              <rect x="328" y="272" width="104" height="66" rx="10" fill="#fff" stroke="#e5e7eb"/>
-              <rect x="452" y="272" width="104" height="66" rx="10" fill="#fff" stroke="#e5e7eb"/>
-              <rect x="576" y="272" width="104" height="66" rx="10" fill="#fff" stroke="#e5e7eb"/>
-              <text x="132" y="300" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">node 1</text>
-              <text x="256" y="300" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">node 2</text>
-              <text x="380" y="300" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">node 3</text>
-              <text x="504" y="300" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">node 4</text>
-              <text x="628" y="300" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111827">node 5</text>
-              <text x="132" y="318" text-anchor="middle" font-size="10.5" fill="#6b7280">keystore</text>
-              <text x="256" y="318" text-anchor="middle" font-size="10.5" fill="#6b7280">keystore</text>
-              <text x="380" y="318" text-anchor="middle" font-size="10.5" fill="#6b7280">keystore</text>
-              <text x="504" y="318" text-anchor="middle" font-size="10.5" fill="#6b7280">keystore</text>
-              <text x="628" y="318" text-anchor="middle" font-size="10.5" fill="#6b7280">keystore</text>
+              <rect x="52" y="340" width="140" height="72" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.5"/>
+              <rect x="206" y="340" width="140" height="72" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.5"/>
+              <rect x="360" y="340" width="140" height="72" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.5"/>
+              <rect x="514" y="340" width="140" height="72" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.5"/>
+              <rect x="668" y="340" width="140" height="72" rx="12" fill="#d9f0dd" stroke="#1f2937" stroke-width="1.5"/>
+              <text x="122" y="371" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2430">node 1</text>
+              <text x="276" y="371" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2430">node 2</text>
+              <text x="430" y="371" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2430">node 3</text>
+              <text x="584" y="371" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2430">node 4</text>
+              <text x="738" y="371" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1f2430">node 5</text>
+              <text x="122" y="392" text-anchor="middle" font-size="12" fill="#6b7280">keystore</text>
+              <text x="276" y="392" text-anchor="middle" font-size="12" fill="#6b7280">keystore</text>
+              <text x="430" y="392" text-anchor="middle" font-size="12" fill="#6b7280">keystore</text>
+              <text x="584" y="392" text-anchor="middle" font-size="12" fill="#6b7280">keystore</text>
+              <text x="738" y="392" text-anchor="middle" font-size="12" fill="#6b7280">keystore</text>
             </g>
-            <line x1="162" y1="66" x2="216" y2="66" stroke="#6b7280" stroke-width="1.3" marker-end="url(#parr)"/>
-            <text x="189" y="56" text-anchor="middle" font-size="10.5" fill="#6b7280">ciphertext</text>
-            <line x1="372" y1="66" x2="426" y2="66" stroke="#6b7280" stroke-width="1.3" marker-end="url(#parr)"/>
-            <text x="399" y="56" text-anchor="middle" font-size="10.5" fill="#6b7280">/v0</text>
-            <line x1="517" y1="102" x2="517" y2="140" stroke="#6b7280" stroke-width="1.3" marker-end="url(#parr)"/>
-            <line x1="426" y1="174" x2="378" y2="174" stroke="#6b7280" stroke-width="1.3" marker-end="url(#parr)"/>
-            <text x="402" y="164" text-anchor="middle" font-size="10.5" fill="#6b7280">root</text>
-            <line x1="640" y1="266" x2="608" y2="108" stroke="#2563eb" stroke-width="1.3" marker-end="url(#parr)"/>
-            <text x="648" y="182" text-anchor="start" font-size="10.5" fill="#2563eb">poll work,</text>
-            <text x="648" y="196" text-anchor="start" font-size="10.5" fill="#2563eb">post shares</text>
+            <path d="M800 336 C862 288, 866 152, 830 88" stroke="#2563eb" stroke-width="1.7" fill="none"/>
+            <path d="M822 98 L828 84 L838 94" fill="none" stroke="#2563eb" stroke-width="1.7"/>
+            <text x="790" y="252" text-anchor="end" font-size="12.5" class="m" fill="#2563eb">poll work,</text>
+            <text x="790" y="270" text-anchor="end" font-size="12.5" class="m" fill="#2563eb">post shares</text>
+            <text x="790" y="288" text-anchor="end" font-size="11.5" fill="#6b7280">outbound only</text>
           </svg>
           <figcaption>Operator nodes connect outbound only; the coordinator can never reach into
           a keystore. Any 3 of the 5 shares complete a reveal.</figcaption>
         </figure>
 
-        <div class="table-wrap">
+        <div class="tcard">
           <table>
             <thead><tr><th>component</th><th>role</th></tr></thead>
             <tbody>
-              <tr><td class="mono">bte-sdk</td><td>fetches and digest-checks parameters, seals in wasm, submits ciphertexts, waits for reveals, optionally verifies the anchored root</td></tr>
-              <tr><td class="mono">bte-coordinator</td><td>condition engine, SQLite state machine, deterministic freeze, pipelined pre-decrypt, pairing checks, REST /v0</td></tr>
-              <tr><td class="mono">bte-node</td><td>polls outbound for frozen work, decrypts its local argon2id + ChaCha20 keystore, computes one partial, posts it</td></tr>
-              <tr><td class="mono">BteAnchor.sol</td><td>commits ciphertext hashes to conditions and records the final merkle root from an authorized publisher</td></tr>
+              <tr><td>bte-sdk</td><td>fetches and digest-checks parameters, seals in wasm, submits ciphertexts, waits for reveals, optionally verifies the anchored root</td></tr>
+              <tr><td>bte-coordinator</td><td>condition engine, SQLite state machine, deterministic freeze, pipelined pre-decrypt, pairing checks, REST /v0</td></tr>
+              <tr><td>bte-node</td><td>polls outbound for frozen work, decrypts its local argon2id + ChaCha20 keystore, computes one partial, posts it</td></tr>
+              <tr><td>BteAnchor.sol</td><td>commits ciphertext hashes to conditions and records the final merkle root from an authorized publisher</td></tr>
             </tbody>
           </table>
         </div>
 
-        <p>A condition moves through four states: <span class="mono">pending</span> (accepting
-        seals), <span class="mono">frozen</span> (collecting shares),
-        <span class="mono">revealed</span> (immutable result), and
-        <span class="mono">stalled</span> if fewer than t shares arrive before the timeout.
-        Stalled is honest, not terminal: one late valid share resumes recovery. A condition is
-        never falsely revealed.</p>
+        <h3>the public API, in one table</h3>
+        <div class="tcard">
+          <table>
+            <thead><tr><th>endpoint</th><th>caller</th><th>purpose</th></tr></thead>
+            <tbody>
+              <tr><td>GET /v0/committees/:id</td><td>everyone</td><td>public parameters, digest-checked by clients</td></tr>
+              <tr><td>POST /v0/conditions</td><td>apps</td><td>create a cue: at a time, in N seconds, or at a block height, with an optional tag</td></tr>
+              <tr><td>GET /v0/conditions[/:id]</td><td>everyone</td><td>status, fires_at, counts, tag, per-batch share progress</td></tr>
+              <tr><td>POST /v0/ciphertexts</td><td>apps</td><td>submit a sealed blob to a pending condition</td></tr>
+              <tr><td>GET /v0/work</td><td>operators</td><td>frozen batches awaiting this operator's share</td></tr>
+              <tr><td>POST /v0/shares</td><td>operators</td><td>submit a 48-byte partial; pairing-verified on arrival</td></tr>
+              <tr><td>GET /v0/reveals/:id</td><td>everyone</td><td>404 until revealed, then slots, share log, timings, merkle root</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" style="font-size:14px">The reveals endpoint returning 404 before the
+        cue is itself an invariant with a test behind it: the test greps the coordinator's
+        database for plaintext bytes while a condition is pending and must find none.</p>
+      </section>
+
+      <section>
+        <h2 id="byzantine">the byzantine drill</h2>
+        <p>The claim that verification catches liars is tested, not asserted. The repo ships a
+        drill (<span class="mono">just demo-byzantine</span>) that runs the full sealed-bid
+        auction with two failures injected at once: operator 2 runs a byzantine build that
+        submits a corrupt share, and operator 5 is killed mid-flow. The recorded outcome,
+        verified through the API rather than the demo's own output: operator 2's share arrives,
+        fails the pairing equation, and is stored as rejected under its identity; operator 5
+        never submits; the reveal completes from the three honest shares. The auction's winner
+        is identical to the clean run.</p>
+        <p>That is the failure envelope in one sentence: up to <span class="mono">n - t</span>
+        operators can lie or die simultaneously, attribution is automatic, and the reveal is
+        bit-exact regardless of which honest subset supplied the shares.</p>
       </section>
 
       <section>
         <h2 id="integration">building on it</h2>
         <p>The product path is four calls: create a condition, seal locally, store the returned
         hash, wait for the reveal.</p>
-        <pre><code>import { BteClient } from 'bte-sdk';
 
-const peal = new BteClient({ url: 'https://peal.network' });
+        <div class="codecard">
+          <span class="lang">typescript</span>
+<pre><code><span class="ck">import</span> { BteClient } <span class="ck">from</span> <span class="cs">'bte-sdk'</span>;
 
-const conditionId = await peal.condition({ in: 60, tag: 'auction-v1' });
-const sealed = await peal.seal(JSON.stringify({
-  app: 'auction-v1',
-  conditionId,
-  lotId: 'lot-42',
+<span class="cc">// one client, pointed at the network</span>
+<span class="ck">const</span> peal = <span class="ck">new</span> BteClient({ url: <span class="cs">'https://peal.network'</span> });
+
+<span class="cc">// a cue 60 seconds out, tagged so this app finds its own rounds</span>
+<span class="ck">const</span> conditionId = <span class="ck">await</span> peal.condition({ <span class="ck">in</span>: 60, tag: <span class="cs">'auction-v1'</span> });
+
+<span class="cc">// seal locally; bind the app context inside the encrypted bytes</span>
+<span class="ck">const</span> sealed = <span class="ck">await</span> peal.seal(JSON.stringify({
+  app: <span class="cs">'auction-v1'</span>,
+  conditionId,                      <span class="cc">// replay binding</span>
+  lotId: <span class="cs">'lot-42'</span>,
   bid: 815,
   nonce: crypto.randomUUID()
 }), conditionId);
 
-const reveal = await peal.waitForReveal(conditionId);
-const slot = reveal.slots.find((s) =&gt; s.ctHash === sealed.ctHash);
+<span class="cc">// the network does the rest; no second transaction exists</span>
+<span class="ck">const</span> reveal = <span class="ck">await</span> peal.waitForReveal(conditionId);
+<span class="ck">const</span> slot = reveal.slots.find((s) =&gt; s.ctHash === sealed.ctHash);
 
-if (!slot?.valid) throw new Error('sealed bid did not recover');
+<span class="ck">if</span> (!slot?.valid) <span class="ck">throw new</span> Error(<span class="cs">'sealed bid did not recover'</span>);
 console.log(slot.text);</code></pre>
+        </div>
 
         <ul>
           <li><strong>Pin the committee digest.</strong> Ship the expected public-parameter
@@ -321,7 +532,7 @@ console.log(slot.text);</code></pre>
           commitment. Store it in your database or anchor it onchain before the cue.</li>
           <li><strong>Tag your conditions.</strong> The optional tag (up to 32 characters of
           <span class="mono">a-z 0-9 : _ -</span>) lets your app find its own rounds and never
-          join a stranger's. This playground keeps bid rounds, vote rounds, and capsules apart
+          join a stranger's. Peal Explorer keeps bid rounds, vote rounds, and capsules apart
           this way.</li>
           <li><strong>Treat reveal as asynchronous.</strong> Poll or index; handle pending,
           frozen, stalled, revealed, and per-slot corrupt states explicitly.</li>
@@ -332,7 +543,7 @@ console.log(slot.text);</code></pre>
         </ul>
 
         <h3>failure behavior is explicit</h3>
-        <div class="table-wrap">
+        <div class="tcard">
           <table>
             <thead><tr><th>failure</th><th>behavior</th></tr></thead>
             <tbody>
@@ -340,7 +551,7 @@ console.log(slot.text);</code></pre>
               <tr><td>one forged share</td><td>pairing check rejects it; the operator identity stays visible in the log</td></tr>
               <tr><td>one mauled ciphertext</td><td>that slot is marked corrupt; the other 63 recover</td></tr>
               <tr><td>coordinator restart</td><td>state reloads from the database, pre-decrypt recomputes, nodes repoll</td></tr>
-              <tr><td>fewer than t shares</td><td>the condition stalls; it is never falsely revealed</td></tr>
+              <tr><td>fewer than t shares</td><td>the condition stalls after 120 s; it is never falsely revealed</td></tr>
               <tr><td>late valid share</td><td>a stalled condition completes automatically</td></tr>
             </tbody>
           </table>
@@ -348,19 +559,38 @@ console.log(slot.text);</code></pre>
       </section>
 
       <section>
+        <h2 id="numbers">the numbers</h2>
+        <p>Measured on the public devnet (n = 5, t = 3, B = 64), not estimated.</p>
+        <div class="tcard">
+          <table>
+            <thead><tr><th>quantity</th><th>value</th><th>note</th></tr></thead>
+            <tbody>
+              <tr><td>seal overhead</td><td class="mono">64 bytes</td><td>48-byte KEM header + 16-byte key mask</td></tr>
+              <tr><td>wire size, short text</td><td class="mono">~110 bytes</td><td>framing adds magic, type, length</td></tr>
+              <tr><td>operator share</td><td class="mono">48 bytes</td><td>one compressed G1 point per operator per batch, any fill</td></tr>
+              <tr><td>pre-decrypt</td><td class="mono">~250 ms</td><td>pipelined away: runs at freeze, before any share exists</td></tr>
+              <tr><td>finalize</td><td class="mono">40 to 150 ms</td><td>user-visible: Lagrange combine + per-slot FO re-check</td></tr>
+              <tr><td>engine tick</td><td class="mono">500 ms</td><td>freeze scheduling granularity</td></tr>
+              <tr><td>stall timeout</td><td class="mono">120 s</td><td>REVEAL_TIMEOUT_SECS; late shares still complete</td></tr>
+              <tr><td>rate limit</td><td class="mono">50 rps, burst 400</td><td>per client IP, token bucket</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
         <h2 id="production">production posture</h2>
-        <p>The current stack runs a transparent public devnet: a real threshold committee, public
-        share verification, durable state, recovery after restart, TLS, rate limiting, and honest
-        stall states. The decisive blocker for real value is the ceremony: v0 uses a single
-        trusted dealer who generates <span class="mono">&tau;</span>, deals the shares, and
-        promises to destroy it.</p>
-        <div class="table-wrap">
+        <p>The current stack runs a transparent public devnet: a real threshold committee,
+        public share verification, durable state on a mounted volume, recovery after restart,
+        TLS, rate limiting, and honest stall states. The decisive blocker for real value is the
+        ceremony.</p>
+        <div class="tcard">
           <table>
             <thead><tr><th>layer</th><th>v0 today</th><th>production target</th></tr></thead>
             <tbody>
               <tr><td>key generation</td><td>offline trusted dealer</td><td>audited DKG; no machine ever knows the whole trapdoor</td></tr>
               <tr><td>operator lifecycle</td><td>new ceremony to replace one</td><td>proactive resharing and rotation under a stable public key</td></tr>
-              <tr><td>availability</td><td>coordinator database</td><td>replicated store plus blob or calldata copies of ciphertexts</td></tr>
+              <tr><td>availability</td><td>coordinator database + volume</td><td>replicated store plus blob or calldata copies of ciphertexts</td></tr>
               <tr><td>accountability</td><td>invalid shares attributable</td><td>stake, slashing, signed work receipts</td></tr>
               <tr><td>verification</td><td>offchain pairing check, anchored root</td><td>EIP-2537 onchain verification of shares and combination</td></tr>
               <tr><td>operations</td><td>health endpoint, structured logs</td><td>SLOs, metrics, paging, tracing, backups</td></tr>

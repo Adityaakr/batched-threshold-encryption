@@ -1062,29 +1062,31 @@ input[type='datetime-local'] {
   transition: border-color 100ms cubic-bezier(0, 0, 0.2, 1);
 }
 
-/* ---------- protocol reference (article style) ---------- */
+/* ---------- protocol reference (editorial article) ---------- */
 
 .protocol-article {
-  max-width: 760px;
+  max-width: 820px;
   margin: 36px auto 0;
   font-size: 16px;
   line-height: 1.7;
 }
 
 .protocol-article .kicker {
-  font-size: 13px;
+  font-family: var(--mono);
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--accent);
-  margin: 0 0 12px;
+  margin: 0 0 14px;
 }
 
 .protocol-article h1 {
-  font-size: 40px;
+  font-size: 42px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.12;
-  margin: 0 0 16px;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  margin: 0 0 18px;
 }
 
 .protocol-article .lede {
@@ -1094,17 +1096,17 @@ input[type='datetime-local'] {
 }
 
 .protocol-article h2 {
-  font-size: 24px;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  margin: 64px 0 12px;
+  font-size: 25px;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+  margin: 72px 0 14px;
   scroll-margin-top: 76px;
 }
 
 .protocol-article h3 {
-  font-size: 17px;
+  font-size: 16.5px;
   font-weight: 700;
-  margin: 32px 0 8px;
+  margin: 34px 0 8px;
 }
 
 .protocol-article p {
@@ -1123,31 +1125,10 @@ input[type='datetime-local'] {
 .protocol-article code {
   font-family: var(--mono);
   font-size: 14px;
-  background: var(--surface, #f8fafc);
-  border: 1px solid var(--border);
+  background: #fbf8f3;
+  border: 1px solid #e7e2d9;
   border-radius: 5px;
   padding: 1px 6px;
-}
-
-.protocol-article pre {
-  background: var(--surface, #f8fafc);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 20px;
-  overflow-x: auto;
-  font-size: 13.5px;
-  line-height: 1.6;
-  margin: 20px 0;
-}
-
-.protocol-article pre code {
-  background: none;
-  border: none;
-  padding: 0;
-}
-
-.protocol-article table {
-  margin: 20px 0;
 }
 
 .protocol-nav {
@@ -1192,9 +1173,10 @@ input[type='datetime-local'] {
   display: flex;
   flex-wrap: wrap;
   gap: 14px 40px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 24px;
+  background: #fff;
+  border: 1px solid #e7e2d9;
+  border-radius: 14px;
+  padding: 20px 26px;
   margin: 28px 0 0;
 }
 
@@ -1213,19 +1195,61 @@ input[type='datetime-local'] {
   font-size: 16px;
 }
 
+/* dark code card with a language tab */
+.codecard {
+  margin: 24px 0;
+}
+
+.codecard .lang {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #e8e3da;
+  background: #3a3631;
+  border-radius: 10px 10px 0 0;
+  padding: 7px 16px 6px;
+  margin-left: 2px;
+}
+
+.codecard pre {
+  margin: 0;
+  background: #2b2825;
+  border-radius: 0 14px 14px 14px;
+  padding: 22px 24px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.codecard code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e8e3da;
+  font-size: 13.5px;
+  font-family: var(--mono);
+}
+
+.codecard .cc { color: #8f887d; }
+.codecard .ck { color: #7e9cd8; }
+.codecard .cs { color: #d3a15d; }
+
+/* formula card: label column + large mono formulas */
 .protocol-article .eq {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  margin: 20px 0;
+  background: #fff;
+  border: 1px solid #e7e2d9;
+  border-radius: 16px;
+  margin: 24px 0;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgb(31 36 48 / 0.03);
 }
 
 .protocol-article .eq > div {
   display: flex;
-  gap: 20px;
-  padding: 10px 18px;
+  gap: 28px;
+  padding: 16px 26px;
   align-items: baseline;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #e7e2d9;
 }
 
 .protocol-article .eq > div:last-child {
@@ -1234,7 +1258,7 @@ input[type='datetime-local'] {
 
 .protocol-article .eq span {
   flex: 0 0 150px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -1242,7 +1266,62 @@ input[type='datetime-local'] {
   background: none;
   border: none;
   padding: 0;
-  font-size: 14px;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+}
+
+/* warm table card: mono blue headers, mono blue key column */
+.tcard {
+  background: #fbf8f3;
+  border: 1px solid #e7e2d9;
+  border-radius: 14px;
+  margin: 24px 0;
+  overflow-x: auto;
+}
+
+.tcard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+
+.tcard th {
+  font-family: var(--mono);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 14px 18px;
+  border-bottom: 1px solid #e7e2d9;
+  vertical-align: top;
+}
+
+.tcard td {
+  padding: 13px 18px;
+  border-bottom: 1px solid #e7e2d9;
+  vertical-align: top;
+}
+
+.tcard tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tcard td:first-child {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.tcard td + td,
+.tcard th + th {
+  border-left: 1px solid #e7e2d9;
+}
+
+.tcard tbody tr:hover {
+  background: transparent;
 }
 
 .protocol-article ol.steps {
@@ -1290,14 +1369,32 @@ input[type='datetime-local'] {
 }
 
 .protocol-article figure {
-  margin: 28px 0;
+  margin: 32px 0;
+  background: #fff;
+  border: 1px solid #e7e2d9;
+  border-radius: 18px;
+  padding: 28px 20px 20px;
 }
 
 .protocol-article figcaption {
   font-size: 13px;
   color: var(--muted);
-  margin-top: 10px;
+  margin-top: 14px;
   text-align: center;
+}
+
+.protocol-article .diagram {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.protocol-article .diagram .serif {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.protocol-article .diagram .m {
+  font-family: var(--mono);
 }
 
 .protocol-article .cols {
@@ -1308,9 +1405,9 @@ input[type='datetime-local'] {
 }
 
 .protocol-article .warning {
-  border: 1px solid var(--red-border, #fecaca);
-  background: var(--red-weak);
-  border-radius: 10px;
+  border: 1px solid #f3c1c1;
+  background: #fdf1f0;
+  border-radius: 12px;
   padding: 14px 18px;
   font-size: 14.5px;
   margin: 24px 0;
@@ -1328,7 +1425,7 @@ input[type='datetime-local'] {
 
 @media (max-width: 640px) {
   .protocol-article h1 {
-    font-size: 30px;
+    font-size: 31px;
   }
 
   .protocol-article .cols {
@@ -1336,6 +1433,6 @@ input[type='datetime-local'] {
   }
 
   .protocol-article .eq span {
-    flex-basis: 105px;
+    flex-basis: 100px;
   }
 }

@@ -1,6 +1,7 @@
 import './style.css';
 import { renderHome } from './pages/home';
 import { renderCondition } from './pages/condition';
+import { renderProtocol } from './pages/protocol';
 import { renderSealView } from './pages/seal-view';
 
 type Cleanup = () => void;
@@ -19,6 +20,8 @@ function route(): void {
     cleanup = renderSealView(root, decodeURIComponent(seal[1]), seal[2], seal[3]);
   } else if (match) {
     cleanup = renderCondition(root, decodeURIComponent(match[1]));
+  } else if (hash === '#/protocol') {
+    cleanup = renderProtocol(root);
   } else {
     cleanup = renderHome(root);
   }

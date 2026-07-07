@@ -57,8 +57,8 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
   protocol or SDK surface changes. Styles live under .protocol-* in style.css.
 
 ## Decision log
-- 2026-07-07: product renamed to OPEN ("open programmable encryption network");
-  explorer is "Open Explorer", identity "the guaranteed reveal network",
+- 2026-07-07: product renamed OPEN then Peal (peal.network) same day;
+  explorer is "Peal Explorer", identity "the guaranteed reveal network",
   headline "commit-reveal without the second transaction.", speed line "add
   fair reveals to your dapp in minutes." Display strings only (brand.md
   Naming section); bte-* crates, bte-sdk, /v0 API, BTE0 wire magic unchanged.

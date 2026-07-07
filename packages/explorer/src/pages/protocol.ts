@@ -10,6 +10,8 @@ const sections = [
 ] as const;
 
 export function renderProtocol(root: HTMLElement): () => void {
+  const previousTitle = document.title;
+  document.title = 'OPEN protocol. architecture, use cases, and production path.';
   root.innerHTML = `
     <article class="protocol-page">
       <header class="protocol-hero" id="overview">
@@ -475,5 +477,6 @@ console.log(slot.text);</code></pre>
   return () => {
     index?.removeEventListener('click', scrollToSection);
     observer.disconnect();
+    document.title = previousTitle;
   };
 }

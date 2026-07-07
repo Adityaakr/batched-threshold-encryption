@@ -1804,6 +1804,7 @@ input[type='datetime-local'] {
 
 body.landing-page {
   background: #eef4fc;
+  overflow: hidden;
 }
 
 body.landing-page .site-header {
@@ -2096,12 +2097,13 @@ body.landing-page main {
 }
 
 @media (max-width: 640px) {
-  /* Phones scroll naturally: no fold-crop, the frame shows in full with a
-     mobile-width screenshot (see the <picture> in landing.ts). */
+  /* Keep the landing page to one mobile viewport. The app preview rises from
+     the bottom and is intentionally cropped by the fold, just like desktop. */
   .landing {
-    max-height: none;
-    overflow: visible;
+    height: 100dvh;
+    max-height: 100dvh;
     min-height: 100dvh;
+    overflow: hidden;
   }
 
   .landing-nav {
@@ -2109,7 +2111,8 @@ body.landing-page main {
   }
 
   .landing-hero {
-    padding: 24px 16px 40px;
+    padding: 24px 16px 0;
+    overflow: hidden;
   }
 
   .landing-title {

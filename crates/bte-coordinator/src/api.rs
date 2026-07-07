@@ -137,6 +137,9 @@ struct CreateCondition {
     /// at_block (phase 7)
     chain_id: Option<i64>,
     height: Option<i64>,
+    /// Optional client label so apps can find their own conditions
+    /// (e.g. "round:bid", "capsule"). Not interpreted by the coordinator.
+    tag: Option<String>,
 }
 
 async fn create_condition(
@@ -151,6 +154,19 @@ async fn create_condition(
         return Err(bad_request("unknown committee"));
     }
     let kind = req.kind.unwrap_or_else(|| "at_time".into());
+    let tag = match req.tag {
+        Some(t) => {
+            if t.len() > 32
+                || !t.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b':' || b == b'-' || b == b'_'
+                })
+            {
+                return Err(bad_request("tag must be <=32 chars of [a-z0-9:_-]"));
+            }
+            Some(t)
+        }
+        None => None,
+    };
     let id = new_id("cond");
     let now = unix_now();
     match kind.as_str() {
@@ -165,14 +181,14 @@ async fn create_condition(
             }
             let conn = app.0.db.lock().unwrap();
             conn.execute(
-                "INSERT INTO conditions (id, committee_id, kind, fires_at, status, created_at)
-                 VALUES (?1, ?2, 'at_time', ?3, 'pending', ?4)",
-                rusqlite::params![id, committee_id, fires_at, now],
+                "INSERT INTO conditions (id, committee_id, kind, fires_at, status, tag, created_at)
+                 VALUES (?1, ?2, 'at_time', ?3, 'pending', ?4, ?5)",
+                rusqlite::params![id, committee_id, fires_at, tag, now],
             )
             .map_err(internal)?;
             Ok(Json(json!({
                 "id": id, "committee_id": committee_id, "kind": "at_time",
-                "fires_at": fires_at, "status": "pending"
+                "fires_at": fires_at, "status": "pending", "tag": tag
             })))
         }
         "at_block" => {
@@ -205,7 +221,7 @@ async fn list_conditions(State(app): State<App>) -> Result<Json<Value>, ApiError
     let conn = app.0.db.lock().unwrap();
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.committee_id, c.kind, c.fires_at, c.status, c.created_at,
+            "SELECT c.id, c.committee_id, c.kind, c.fires_at, c.status, c.created_at, c.tag,
                     COUNT(x.ct_hash), COALESCE(SUM(x.is_dummy = 0), 0)
              FROM conditions c LEFT JOIN ciphertexts x ON x.condition_id = c.id
              GROUP BY c.id ORDER BY c.created_at DESC LIMIT 100",
@@ -220,8 +236,9 @@ async fn list_conditions(State(app): State<App>) -> Result<Json<Value>, ApiError
                 "fires_at": r.get::<_, Option<i64>>(3)?,
                 "status": r.get::<_, String>(4)?,
                 "created_at": r.get::<_, i64>(5)?,
-                "ciphertext_count": r.get::<_, i64>(6)?,
-                "real_count": r.get::<_, i64>(7)?,
+                "tag": r.get::<_, Option<String>>(6)?,
+                "ciphertext_count": r.get::<_, i64>(7)?,
+                "real_count": r.get::<_, i64>(8)?,
             }))
         })
         .map_err(internal)?
@@ -237,7 +254,7 @@ async fn get_condition(
     let conn = app.0.db.lock().unwrap();
     let row = conn
         .query_row(
-            "SELECT committee_id, kind, fires_at, chain_id, height, status, created_at
+            "SELECT committee_id, kind, fires_at, chain_id, height, status, created_at, tag
              FROM conditions WHERE id = ?1",
             [&id],
             |r| {
@@ -250,6 +267,7 @@ async fn get_condition(
                     "height": r.get::<_, Option<i64>>(4)?,
                     "status": r.get::<_, String>(5)?,
                     "created_at": r.get::<_, i64>(6)?,
+                    "tag": r.get::<_, Option<String>>(7)?,
                 }))
             },
         )

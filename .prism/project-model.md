@@ -46,6 +46,14 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
   API state, not pipe tails.
 
 ## Decision log
+- 2026-07-07: product renamed to OPEN ("open programmable encryption network");
+  explorer is "Open Explorer", identity "the guaranteed reveal network",
+  headline "commit-reveal without the second transaction.", speed line "add
+  fair reveals to your dapp in minutes." Display strings only (brand.md
+  Naming section); bte-* crates, bte-sdk, /v0 API, BTE0 wire magic unchanged.
+- 2026-07-07: private seals: AES-128-GCM layer over capsule payloads, key in
+  the share-link fragment only (packages/explorer/src/privacy.ts, BTEP1 wire
+  prefix). Default ON for time capsules; bids/votes stay public by design.
 - 2026-07-07: FO transform as DEM + CCA (spec allowed it; DEVIATIONS #1/#2).
 - 2026-07-07: per-slot validity via bandwidth-optimized hints `[k_i]_1==ct0`
   (public API only) so mauled cts never poison a batch.
@@ -61,6 +69,32 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
 - Dockerfile.web builds the pnpm workspace in 3 stages (wasm-pack -> pnpm -> caddy); .dockerignore added.
 - Browser e2e pattern: playwright script in scratchpad drives seal->reveal with screenshots; port 8080
   may be held by the user's other projects (cusp-fi vite) — use a compose port override (18080) for tests.
+
+## Condition tags + round segregation (2026-07-07)
+- conditions carry an optional `tag` TEXT column (db.rs schema + ALTER
+  migration in db.rs open()); create_condition validates <=32 chars of
+  [a-z0-9:_-] (api.rs); returned by list/get. SDK condition() takes tag.
+- Playground tags: `round:bid`, `round:vote` (shared, joinable), `capsule`
+  (never joined). findOpenRound(tag) matches tag exactly — untagged/legacy
+  conditions are never joined (playground.ts). Round length: first sealer's
+  #pg-round-secs select (30s..1h) sets it; joiners inherit.
+- INVARIANT: never join a condition whose tag you did not create for that
+  purpose — joining someone's capsule strands the entry until the capsule
+  fires (the original bug).
+
+## Dummy padding (mapped 2026-07-07)
+- WHY: B=64 is baked into the ceremony CRS (punctured powers-of-tau, FFT domain,
+  spec/index.md:32,39-42); every batch MUST be exactly B slots, so the
+  coordinator pads with self-sealed dummies at freeze (engine.rs:135-143).
+- Each dummy is a REAL FO ciphertext sealing "BTE_DUMMY_V0:" + 16 random bytes
+  (bte-crypto/src/lib.rs:449-455); unique ct_hash per batch; committed in the
+  merkle root with all slots (engine.rs:407-430); operators do real work on them.
+- Reveal API exposes per slot ONLY: position, ct_hash, is_dummy, valid,
+  payload_b64 (engine.rs:19-25, api.ts:50-56). Dummy rows are visually
+  identical except position/hash — the expandable 63-row table in
+  condition.ts boardTable duplicates what the slot grid already shows.
+- Classification logic (corrupt/dummy/private/real) is duplicated between
+  slotGrid (condition.ts:211-219) and slotRow (condition.ts:234-245).
 
 ## Share-link recipient flow (mapped 2026-07-07)
 - Link format: `${origin}${pathname}#/s/<conditionId>/<ctHash>` (packages/explorer/src/playground.ts:70);

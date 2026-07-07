@@ -153,14 +153,17 @@ export class BteClient {
   }
 
   /** Create a reveal condition: {at: Date|unixSeconds}, {in: seconds}, or
-   * {atBlock: {chainId, height}}. */
+   * {atBlock: {chainId, height}}. An optional {tag} labels the condition so
+   * your app can find its own rounds later (<=32 chars of [a-z0-9:_-]). */
   async condition(when: {
     at?: Date | number;
     in?: number;
     atBlock?: { chainId: number; height: number };
+    tag?: string;
   }): Promise<string> {
     const info = await this.committee();
     const body: Record<string, unknown> = { committee_id: info.id };
+    if (when.tag !== undefined) body.tag = when.tag;
     if (when.atBlock !== undefined) {
       body.kind = 'at_block';
       body.chain_id = when.atBlock.chainId;

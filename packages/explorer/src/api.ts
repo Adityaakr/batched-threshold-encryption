@@ -23,6 +23,8 @@ export interface ConditionSummary {
   fires_at: number | null;
   status: 'pending' | 'frozen' | 'revealed' | 'stalled';
   created_at: number;
+  /** Client label set at creation (round:bid, round:vote, capsule). */
+  tag?: string | null;
   ciphertext_count: number;
   real_count: number;
 }

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS conditions (
     chain_id     INTEGER,                    -- at_block
     height       INTEGER,                    -- at_block
     status       TEXT NOT NULL DEFAULT 'pending',  -- pending|frozen|revealed|stalled
+    tag          TEXT,                       -- optional client label (round:bid, capsule, ...)
     created_at   INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ciphertexts (
@@ -71,6 +72,8 @@ pub fn open(path: &str) -> Result<Connection> {
     conn.pragma_update(None, "journal_mode", "WAL").ok();
     conn.pragma_update(None, "busy_timeout", 5000)?;
     conn.execute_batch(SCHEMA)?;
+    // Migration for databases created before the tag column existed.
+    conn.execute("ALTER TABLE conditions ADD COLUMN tag TEXT", []).ok();
     Ok(conn)
 }
 

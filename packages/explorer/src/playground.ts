@@ -138,13 +138,27 @@ export function renderPlayground(host: HTMLElement): () => void {
   const errorEl = host.querySelector<HTMLElement>('#pg-error')!;
   const liveEl = host.querySelector<HTMLElement>('#pg-live')!;
 
+  /** Round-length choices for the shared scenarios. The first sealer's pick
+   * sets the round; everyone after joins whatever is open. */
+  const roundSelect = () => `
+    <select id="pg-round-secs" aria-label="round length">
+      <option value="30">30s round</option>
+      <option value="60" selected>60s round</option>
+      <option value="120">2m round</option>
+      <option value="300">5m round</option>
+      <option value="600">10m round</option>
+      <option value="3600">1h round</option>
+    </select>`;
+
   function renderFields(): void {
+    roundEl.textContent = ''; // never show the previous scenario's round note
     if (scenario === 'bid') {
       fieldsEl.innerHTML = `
         <div class="pg-row">
           <input id="pg-name" name="name" type="text" maxlength="24" placeholder="your name" aria-label="your name" />
           <input id="pg-amount" name="amount" type="number" min="1" max="1000000" required
                  placeholder="your bid" aria-label="your bid" />
+          ${roundSelect()}
           <button type="submit" class="btn btn-primary" id="pg-seal">seal my bid</button>
         </div>`;
       hintEl.textContent =
@@ -157,6 +171,7 @@ export function renderPlayground(host: HTMLElement): () => void {
             <option value="yes">vote yes</option>
             <option value="no">vote no</option>
           </select>
+          ${roundSelect()}
           <button type="submit" class="btn btn-primary" id="pg-seal">seal my vote</button>
         </div>`;
       hintEl.textContent =
@@ -208,15 +223,18 @@ export function renderPlayground(host: HTMLElement): () => void {
     void updateRoundNote();
   }
 
-  /** Newest pending round with enough time left to join safely. */
-  async function findOpenRound(): Promise<{ id: string; secs: number } | null> {
+  /** Newest pending round FOR THIS SCENARIO with enough time left to join
+   * safely. Rounds are matched by tag, so bids never land in vote rounds and
+   * nothing ever joins somebody's time capsule. Untagged (older) conditions
+   * are never joined. */
+  async function findOpenRound(tag: string): Promise<{ id: string; secs: number } | null> {
     try {
       const conditions = await listConditions();
       const now = Math.floor(Date.now() / 1000);
       const open = conditions.find(
         (c) =>
           c.status === 'pending' && c.kind === 'at_time' && c.fires_at != null &&
-          c.fires_at - now >= MIN_JOIN_SECS,
+          c.tag === tag && c.fires_at - now >= MIN_JOIN_SECS,
       );
       return open ? { id: open.id, secs: open.fires_at! - now } : null;
     } catch {
@@ -224,15 +242,24 @@ export function renderPlayground(host: HTMLElement): () => void {
     }
   }
 
+  const roundTag = () => `round:${scenario}`;
+
+  function chosenRoundSecs(): number {
+    const v = Number(host.querySelector<HTMLSelectElement>('#pg-round-secs')?.value);
+    return Number.isFinite(v) && v > 0 ? v : ROUND_SECS;
+  }
+
   async function updateRoundNote(): Promise<void> {
     if (scenario === 'note') {
       roundEl.textContent = '';
       return;
     }
-    const open = await findOpenRound();
+    const forScenario = scenario;
+    const open = await findOpenRound(roundTag());
+    if (scenario !== forScenario) return; // user switched while we fetched
     roundEl.textContent = open
-      ? `joins the open round, reveals in ${open.secs}s. open this page in another tab to compete.`
-      : `starts a new ${ROUND_SECS}s round. open this page in another tab to compete.`;
+      ? `joins the open ${forScenario} round, reveals in ${open.secs}s. open this page in another tab to compete.`
+      : `starts a new ${forScenario} round with the length you pick. open this page in another tab to compete.`;
   }
 
   host.querySelectorAll<HTMLButtonElement>('.chip-btn').forEach((btn) => {
@@ -310,7 +337,8 @@ export function renderPlayground(host: HTMLElement): () => void {
       setStep(0, 'active');
       const committee = await client.committee();
 
-      // Bids and votes join the open shared round; capsules get their own.
+      // Bids and votes join the open round FOR THEIR SCENARIO (matched by
+      // tag); capsules get their own tagged condition nobody else joins.
       let conditionId: string;
       if (scenario === 'note') {
         const delayVal = host.querySelector<HTMLSelectElement>('#pg-delay')?.value ?? '60';
@@ -320,13 +348,15 @@ export function renderPlayground(host: HTMLElement): () => void {
           if (!untilVal || Number.isNaN(until.getTime()) || until.getTime() < Date.now() + 60_000) {
             throw new Error('pick a date at least a minute in the future');
           }
-          conditionId = await client.condition({ at: until });
+          conditionId = await client.condition({ at: until, tag: 'capsule' });
         } else {
-          conditionId = await client.condition({ in: Number(delayVal) });
+          conditionId = await client.condition({ in: Number(delayVal), tag: 'capsule' });
         }
       } else {
-        const open = await findOpenRound();
-        conditionId = open ? open.id : await client.condition({ in: ROUND_SECS });
+        const open = await findOpenRound(roundTag());
+        conditionId = open
+          ? open.id
+          : await client.condition({ in: chosenRoundSecs(), tag: roundTag() });
       }
       setStep(0, 'done',
         `digest ${committee.digest.slice(0, 12)}…, n=${committee.n} t=${committee.t} B=${committee.b}, re-checked against the wasm parse`);
@@ -350,7 +380,7 @@ export function renderPlayground(host: HTMLElement): () => void {
       } catch (e) {
         // The round froze while we were sealing: start a fresh one.
         if (String(e).includes('closed') && scenario !== 'note') {
-          conditionId = await client.condition({ in: ROUND_SECS });
+          conditionId = await client.condition({ in: chosenRoundSecs(), tag: roundTag() });
           sealed = await client.seal(payload, conditionId);
         } else {
           throw e;

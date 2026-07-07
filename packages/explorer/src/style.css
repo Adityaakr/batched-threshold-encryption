@@ -58,8 +58,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
   color: var(--text);
   text-decoration: none;
@@ -78,6 +79,7 @@ body {
 }
 
 .site-sub {
+  font-family: 'DM Sans', 'Satoshi', system-ui, -apple-system, sans-serif;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
@@ -134,8 +136,9 @@ h1 {
 }
 
 h2 {
-  font-size: 16px;
-  font-weight: 700;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  font-weight: 500;
   margin: 36px 0 12px;
 }
 
@@ -144,14 +147,16 @@ h2 {
 }
 
 .hero-title {
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 36px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
   margin: 0 0 10px;
 }
 
 .hero-sub {
+  font-family: 'DM Sans', 'Satoshi', system-ui, -apple-system, sans-serif;
   color: var(--muted);
   max-width: 560px;
   margin: 0 0 24px;

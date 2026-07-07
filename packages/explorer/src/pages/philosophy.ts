@@ -93,7 +93,7 @@ export function renderPhilosophy(root: HTMLElement): () => void {
         <p class="philosophy-signoff">Seal now. Reveal on cue.</p>
         <div class="philosophy-links">
           <a class="link" href="#/protocol">How it works</a>
-          <a class="link" href="#/">The live explorer</a>
+          <a class="link" href="#/app">The live explorer</a>
         </div>
       </footer>
     </article>

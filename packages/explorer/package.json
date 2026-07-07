@@ -15,6 +15,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@splinetool/runtime": "^1.12.98",
     "bte-sdk": "workspace:*"
   }
 }

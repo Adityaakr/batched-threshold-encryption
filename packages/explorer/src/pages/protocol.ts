@@ -631,7 +631,7 @@ console.log(slot.text);</code></pre>
           <a class="link" href="https://eprint.iacr.org/2026/760" target="_blank" rel="noopener">the paper</a>
           <a class="link" href="https://github.com/commonwarexyz/simple-bte" target="_blank" rel="noopener">simple-bte</a>
           <a class="link" href="https://github.com/Adityaakr/batched-threshold-encryption" target="_blank" rel="noopener">Peal source</a>
-          <a class="link" href="#/">the live explorer</a>
+          <a class="link" href="#/app">the live explorer</a>
         </div>
       </section>
     </article>

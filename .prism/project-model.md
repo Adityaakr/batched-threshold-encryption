@@ -59,6 +59,15 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
   400/500 headings, DM Sans body, hairline section separators, scroll-reveal
   motion on header + all sections via the shared src/reveal.ts helper
   (mountScrollReveal; .scroll-reveal/.is-visible classes in style.css).
+- Landing page at #/ (packages/explorer/src/pages/landing.ts, 2026-07-08): a
+  full-screen dark hero (Sora font, near-black bg, Peal-blue accent) over a
+  lazy-loaded Spline 3D scene (@splinetool/runtime, scene
+  prod.spline.design/Slk6b8kz3LRlKiyk; decorative, dark hero stands alone if
+  it fails). Content bottom-left, staggered blur-fade entrance. Its own fixed
+  nav (Philosophy/Protocol/Explorer/Code + Launch App). The EXPLORER moved to
+  #/app (main.ts routes; unknown hashes still fall through to the explorer).
+  body.landing-page hides the standard site header and unclamps main.
+  Landing deliberately uses Sora, not the Josefin/DM Sans app system.
 - Philosophy manifesto at #/philosophy (packages/explorer/src/pages/philosophy.ts,
   route in main.ts, sole visible header nav link — network/protocol/code links
   are hidden in index.html, 2026-07-08 user request). Copy is user-authored

@@ -1,6 +1,8 @@
 # Peal - add fair reveals to your dapp in minutes
 
-### Peal, the guaranteed reveal network (peal.network)
+### Peal — the programmable disclosure network.
+
+ (peal.network)
 
 Commit-reveal without the second transaction. Sealed bids, hidden votes,
 fair launches, guaranteed openings: one call to seal, one guaranteed batch

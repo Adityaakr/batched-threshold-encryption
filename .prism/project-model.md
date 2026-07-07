@@ -55,6 +55,22 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
   architecture, production posture, integration (incl. tags), trust model.
   Grounded in spec/index.md + engine.rs/merkle.rs; keep in sync when the
   protocol or SDK surface changes. Styles live under .protocol-* in style.css.
+  Restyled 2026-07-08 to match the philosophy design system: Josefin Sans
+  400/500 headings, DM Sans body, hairline section separators, scroll-reveal
+  motion on header + all sections via the shared src/reveal.ts helper
+  (mountScrollReveal; .scroll-reveal/.is-visible classes in style.css).
+- Philosophy manifesto at #/philosophy (packages/explorer/src/pages/philosophy.ts,
+  route in main.ts, sole visible header nav link — network/protocol/code links
+  are hidden in index.html, 2026-07-08 user request). Copy is user-authored
+  verbatim (epigraph + 6 tenets + "what this unlocks" + "seal now. reveal on
+  cue." sign-off). Redesigned 2026-07-08 per user: sentence-case grammar
+  (capitals restored), Josefin Sans 300-500 headings ("not too bold"), DM Sans
+  body (both via Google Fonts in index.html), centered header, 64px numeral
+  gutter, hairline tenet separators, scroll-reveal motion (blur 14px + rise +
+  fade, 700ms ease-out; above-fold blocks stagger in on load 110ms apart,
+  below-fold via IntersectionObserver; reduced-motion shows all instantly).
+  Styles under .philosophy-* in style.css. NOTE: this page intentionally
+  deviates from brand.md typography (Satoshi/Inter) at user request.
 
 ## Decision log
 - 2026-07-07: product renamed OPEN then Peal (peal.network) same day;

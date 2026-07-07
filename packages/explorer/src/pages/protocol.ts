@@ -2,6 +2,8 @@
 // and tables, a dark code card, clean comparison/state/architecture
 // diagrams. Same content spine as docs/protocol.html; every claim traces to
 // spec/index.md or the coordinator/SDK code. Keep both in sync.
+import { mountScrollReveal } from '../reveal';
+
 const sections = [
   ['overview', 'Overview'],
   ['problem', 'The problem'],
@@ -24,7 +26,7 @@ export function renderProtocol(root: HTMLElement): () => void {
   document.title = 'Peal protocol. how guaranteed reveal works';
   root.innerHTML = `
     <article class="protocol-article">
-      <header id="overview">
+      <header id="overview" class="scroll-reveal">
         <p class="kicker">Peal protocol reference · v0</p>
         <h1>How Peal guarantees every reveal.</h1>
         <p class="lede">Peal is a programmable encryption network for information that must stay
@@ -47,7 +49,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         ${sections.map(([id, label], index) => `<button type="button" data-section="${id}"${index === 0 ? ' aria-current="true"' : ''}>${label}</button>`).join('')}
       </nav>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="problem">The problem</h2>
         <p>Commit-reveal is the standard way to hide information on a public ledger until a
         deadline: users post a hash now and the preimage later. The pattern is sound cryptography
@@ -115,7 +117,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         The user's only action is the seal.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="compare">Why threshold, not the alternatives</h2>
         <p>Guaranteed reveal has three other known constructions. Each carries a cost Peal was
         built to avoid, and each has real uses; the table is a scoping tool, not a dismissal.</p>
@@ -145,7 +147,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         lying operator is caught by arithmetic, not by reputation.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="lifecycle">What one payload goes through</h2>
         <ol class="steps">
           <li><div>
@@ -231,7 +233,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         </figure>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="engine">The condition engine</h2>
         <p>The coordinator's scheduler is a 500 ms tick loop, not a callback registry. Each pass
         it freezes any pending wall-clock condition whose time has come, polls configured RPC
@@ -247,7 +249,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         repoll. Killing the coordinator mid-reveal delays the reveal; it cannot corrupt it.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="crypto">The cryptography</h2>
         <p>Peal wraps Commonware's batched threshold encryption
         (<a class="link" href="https://eprint.iacr.org/2026/760" target="_blank" rel="noopener">eprint 2026/760</a>
@@ -337,7 +339,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         recompute the root, and compare it with the published or onchain-anchored value.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="ceremony">The ceremony and the keys</h2>
         <p>v0 key generation is a single offline dealer running
         <span class="mono">simple-bte::crs::setup</span>: it samples
@@ -359,7 +361,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         applications pinned.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="privacy">Two privacy layers</h2>
         <p><strong>The network proves when. The link decides who.</strong> Threshold reveal is
         deliberately public: after the cue, every slot's plaintext is on the record so anyone
@@ -379,7 +381,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         content stays unreadable, by construction.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="architecture">Architecture</h2>
         <p>The design separates the public edge from secret-bearing operators. The browser and
         explorer are public. The coordinator is a scheduler and aggregator that never sees
@@ -475,7 +477,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         database for plaintext bytes while a condition is pending and must find none.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="byzantine">The byzantine drill</h2>
         <p>The claim that verification catches liars is tested, not asserted. The repo ships a
         drill (<span class="mono">just demo-byzantine</span>) that runs the full sealed-bid
@@ -490,7 +492,7 @@ export function renderProtocol(root: HTMLElement): () => void {
         bit-exact regardless of which honest subset supplied the shares.</p>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="integration">Building on it</h2>
         <p>The product path is four calls: create a condition, seal locally, store the returned
         hash, wait for the reveal.</p>
@@ -558,7 +560,7 @@ console.log(slot.text);</code></pre>
         </div>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="numbers">The numbers</h2>
         <p>Measured on the public devnet (n = 5, t = 3, B = 64), not estimated.</p>
         <div class="tcard">
@@ -578,7 +580,7 @@ console.log(slot.text);</code></pre>
         </div>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="production">Production posture</h2>
         <p>The current stack runs a transparent public devnet: a real threshold committee,
         public share verification, durable state on a mounted volume, recovery after restart,
@@ -600,7 +602,7 @@ console.log(slot.text);</code></pre>
         </div>
       </section>
 
-      <section>
+      <section class="scroll-reveal">
         <h2 id="trust">The trust model, stated precisely</h2>
         <div class="cols">
           <div>
@@ -635,6 +637,7 @@ console.log(slot.text);</code></pre>
     </article>
   `;
 
+  const cleanupReveal = mountScrollReveal(root);
   const nav = root.querySelector<HTMLElement>('.protocol-nav');
   const buttons = Array.from(nav?.querySelectorAll<HTMLButtonElement>('[data-section]') ?? []);
   const setCurrentSection = (id: string) => {
@@ -671,6 +674,7 @@ console.log(slot.text);</code></pre>
   }
 
   return () => {
+    cleanupReveal();
     nav?.removeEventListener('click', scrollToSection);
     observer.disconnect();
     document.title = previousTitle;

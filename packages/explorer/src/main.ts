@@ -1,6 +1,7 @@
 import './style.css';
 import { renderHome } from './pages/home';
 import { renderCondition } from './pages/condition';
+import { renderPhilosophy } from './pages/philosophy';
 import { renderProtocol } from './pages/protocol';
 import { renderSealView } from './pages/seal-view';
 
@@ -22,6 +23,8 @@ function route(): void {
     cleanup = renderCondition(root, decodeURIComponent(match[1]));
   } else if (hash === '#/protocol') {
     cleanup = renderProtocol(root);
+  } else if (hash === '#/philosophy') {
+    cleanup = renderPhilosophy(root);
   } else {
     cleanup = renderHome(root);
   }

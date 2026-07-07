@@ -101,6 +101,11 @@ body {
   font-size: 13px;
 }
 
+.site-nav[hidden],
+.site-nav a[hidden] {
+  display: none;
+}
+
 .site-nav a {
   color: var(--muted);
   text-decoration: none;
@@ -1183,29 +1188,177 @@ input[type='datetime-local'] {
 .protocol-article {
   max-width: 820px;
   margin: 36px auto 0;
+  font-family: 'DM Sans', 'Satoshi', system-ui, -apple-system, sans-serif;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.75;
+  color: #1f2937;
 }
 
 .protocol-article .kicker {
-  font-family: var(--mono);
+  font-family: 'DM Sans', system-ui, sans-serif;
   font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--accent);
-  margin: 0 0 14px;
+  margin: 0 0 18px;
 }
 
 .protocol-article h1 {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: clamp(40px, 5vw, 50px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: clamp(32px, 4.5vw, 46px);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
   text-wrap: balance;
-  white-space: nowrap;
   margin: 0 0 24px;
+  color: var(--text);
+}
+
+/* ---------- philosophy (manifesto page) ----------
+   Josefin Sans (light, never heavier than 500) for headings, DM Sans for
+   body text. Numerals in a side gutter, hairlines instead of cards, one
+   accent. Blocks blur in smoothly as they scroll into view. */
+
+.philosophy {
+  max-width: 680px;
+  margin: 80px auto 128px;
+  font-family: 'DM Sans', 'Satoshi', system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  line-height: 1.8;
+  color: #1f2937;
+}
+
+.philosophy-header {
+  text-align: center;
+  margin-bottom: 96px;
+}
+
+.philosophy-kicker {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 22px;
+}
+
+.philosophy-headline {
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: clamp(30px, 4.2vw, 44px);
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  text-wrap: balance;
+  margin: 0;
+  color: var(--text);
+}
+
+.philosophy-tenet {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 0 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 44px;
+  margin-bottom: 72px;
+}
+
+.philosophy-num {
+  font-family: 'Josefin Sans', system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 300;
+  color: var(--muted-soft);
+  line-height: 1.5;
+  padding-top: 3px;
+}
+
+.philosophy-tenet-title {
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 25px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-wrap: balance;
+  margin: 0 0 14px;
+  color: var(--text);
+}
+
+.philosophy-body {
+  margin: 0;
+}
+
+.philosophy-unlocks {
+  border-top: 1px solid var(--border);
+  padding-top: 44px;
+  margin-bottom: 96px;
+}
+
+.philosophy-close {
+  border-top: 1px solid var(--border);
+  padding-top: 64px;
+  text-align: center;
+}
+
+.philosophy-signoff {
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  margin: 0 0 30px;
+  color: var(--text);
+}
+
+.philosophy-links {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Shared scroll reveal (philosophy + protocol): soft (blurred, low,
+   transparent) until the block enters the viewport, then it settles into
+   focus. reveal.ts adds .is-visible; under reduced motion the class is added
+   immediately and this media query never hides anything. */
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(14px);
+    transition:
+      opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 700ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .scroll-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .philosophy {
+    margin-top: 48px;
+    padding: 0 4px;
+  }
+
+  .philosophy-header {
+    margin-bottom: 64px;
+  }
+
+  .philosophy-tenet {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding-top: 36px;
+    margin-bottom: 56px;
+  }
+
+  .philosophy-num {
+    margin-bottom: 8px;
+  }
 }
 
 .protocol-article .lede {
@@ -1214,23 +1367,32 @@ input[type='datetime-local'] {
   margin: 0;
 }
 
+.protocol-article section {
+  border-top: 1px solid var(--border);
+  margin-top: 64px;
+  padding-top: 44px;
+}
+
 .protocol-article h2 {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 29px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  margin: 72px 0 14px;
-  scroll-margin-top: 76px;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-wrap: balance;
+  margin: 0 0 14px;
+  scroll-margin-top: 96px;
+  color: var(--text);
 }
 
 .protocol-article h3 {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
+  font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
   margin: 34px 0 8px;
+  color: var(--text);
 }
 
 .protocol-article p {
@@ -1413,10 +1575,10 @@ input[type='datetime-local'] {
 
 .protocol-article .eq span {
   color: var(--accent);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.055em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   line-height: 1.35;
   text-transform: uppercase;
 }
@@ -1587,9 +1749,7 @@ input[type='datetime-local'] {
 
 @media (max-width: 640px) {
   .protocol-article h1 {
-    font-size: 38px;
-    letter-spacing: -0.03em;
-    white-space: normal;
+    font-size: 32px;
   }
 
   .protocol-article .cols {

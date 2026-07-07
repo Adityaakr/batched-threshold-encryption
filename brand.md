@@ -4,12 +4,13 @@ _Status: active_ (renamed from bte 2026-07-07; design spec from the original bui
 
 ## Naming
 
-- Product name: **Peal**, the guaranteed reveal network. Domain: peal.network.
-- The explorer is **Peal Explorer**.
+- Product name: **Peal**. Domain: peal.network. Site title: **Peal Network**.
+- The explorer surface is titled **Peal Network**.
 - Logo: the teal leaf at packages/explorer/public/peal-logo.svg (also the
   favicon). Leaf teals #00737F / #005866 are LOGO-ONLY colors, never UI
   accents; the UI accent stays #2563eb.
-- Identity line: "the guaranteed reveal network"
+- Identity line: "peal — the programmable disclosure network." (user-approved
+  em-dash exception, 2026-07-07; everywhere else the no-em-dash rule holds)
 - Headline: "your users commit. the network reveals."
 - Supporting line: "commit-reveal without the second transaction."
 - Speed line: "add fair reveals to your dapp in minutes."

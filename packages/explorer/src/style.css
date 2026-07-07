@@ -1,4 +1,4 @@
-/* Peal Explorer. Brand: white, Satoshi, one accent (#2563eb), sentence case,
+/* Peal Network. Brand: white, Satoshi, one accent (#2563eb), sentence case,
    monospace numerals, hairline borders. See brand.md at the repo root. */
 
 :root {
@@ -39,17 +39,19 @@ body {
 .site-header {
   max-width: 960px;
   margin: 0 auto;
-  padding: 32px 24px 12px;
+  padding: 28px 24px 12px;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 24px;
+  align-items: center;
+  gap: 16px 24px;
+  flex-wrap: wrap;
 }
 
 .site-identity {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .site-title {
@@ -58,6 +60,7 @@ body {
   gap: 9px;
   font-size: 22px;
   font-weight: 700;
+  white-space: nowrap;
   color: var(--text);
   text-decoration: none;
   border-radius: 4px;
@@ -77,6 +80,18 @@ body {
 .site-sub {
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.4;
+  padding-left: 33px;
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    padding-top: 20px;
+  }
+
+  .site-sub {
+    font-size: 12px;
+  }
 }
 
 .site-nav {

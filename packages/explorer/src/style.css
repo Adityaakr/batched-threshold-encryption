@@ -2071,6 +2071,10 @@ body.landing-page main {
   background: #fff;
 }
 
+.landing-shot-mobile {
+  display: none !important;
+}
+
 @keyframes landing-fade-up {
   0% {
     opacity: 0;
@@ -2092,11 +2096,41 @@ body.landing-page main {
 }
 
 @media (max-width: 640px) {
+  /* Phones scroll naturally: no fold-crop, the frame shows in full with a
+     mobile-width screenshot (see the <picture> in landing.ts). */
+  .landing {
+    max-height: none;
+    overflow: visible;
+    min-height: 100dvh;
+  }
+
+  .landing-nav {
+    padding: 14px 16px;
+  }
+
+  .landing-hero {
+    padding: 24px 16px 40px;
+  }
+
   .landing-title {
     margin-top: 8px;
   }
 
+  .landing-sub {
+    font-size: 15px;
+  }
+
   .landing-frame {
     margin-top: 28px;
+    width: 100%;
+    border-radius: 14px;
+  }
+
+  .landing-shot-desktop {
+    display: none !important;
+  }
+
+  .landing-shot-mobile {
+    display: block !important;
   }
 }

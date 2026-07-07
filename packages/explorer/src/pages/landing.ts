@@ -39,7 +39,10 @@ export function renderLanding(root: HTMLElement): () => void {
             <span class="landing-dot landing-dot-green"></span>
             <span class="landing-frame-url">peal.network</span>
           </div>
-          <img src="/app-preview.png" alt="The Peal explorer: seal a payload, watch the committee reveal it on cue" />
+          <img class="landing-shot-desktop" src="/app-preview.png"
+            alt="The Peal explorer: seal a payload, watch the committee reveal it on cue" />
+          <img class="landing-shot-mobile" src="/app-preview-mobile.png" loading="lazy"
+            alt="The Peal explorer: seal a payload, watch the committee reveal it on cue" />
         </div>
       </section>
     </div>

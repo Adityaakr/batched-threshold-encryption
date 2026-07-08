@@ -149,6 +149,31 @@ green. Contract: `spec/index.md`. Status + gates: `PROGRESS.md`, `REPORT.md`.
   2s poll to ~1/min, so "opens by itself" is unreliable when hidden), no sender name/label
   (conditions table has no creator/memo column, db.rs:16-25; kicker hardcoded seal-view.ts:13).
 
+## Decision log
+- 2026-07-08 (prism-plan): next-phase direction = "earn the network thesis on ONE
+  painkiller." Refuted BOTH extremes: (a) traction-first on agent track records while
+  deferring DKG (3/3 adversarial skeptics refuted: trusted dealer is an INTEGRITY break
+  for a trust product, not a low-harm caveat; near-term demand is a mirage; the deferral
+  gate is circular), and (b) solo multi-month DKG with no user (round-1 lenses). Plan =
+  3 parallel tracks: (1) remove single-dealer trust hole de-risked (investigate multi-party
+  SETUP CEREMONY as lighter alt to full DKG; get grant / commonware co-dev / open-source
+  help), (2) validate ONE painkiller = sealed-bid/dark-block sealed order flow sold as a
+  dedicated committee, with an 8-week demand kill-criterion (NOT agent records = vitamin),
+  (3) cheap finishers: Sepolia run, npm publish, Railway cleanup. Token ($PEAL/$sPEAL) LAST;
+  $sPEAL = highest reg risk. Full doc: docs/plans/001-peal-next-plan.md.
+- Chain (grounded 2026-07-08): EIP-2537 BLS12-381 precompile is LIVE on ETH mainnet
+  (Pectra) so Stage-2 on-chain verify is buildable on ETH today; Solana BLS12-381 =
+  SIMD-0388, pending devnet (Agave v4.0.0-beta) + mainnet, so Solana anchor tier works now
+  but on-chain verify is not yet available to programs.
+
+## INVARIANT (2026-07-08)
+- Peal's whole value is trust-minimization, so the SINGLE-TRUSTED-DEALER ceremony
+  (bte-cli samples tau in one process, lib.rs:192-233) negates the value prop for EVERY
+  serious use, including "low-value" reputational ones. Do not market "reveal-later
+  encryption / tau is gone" or onboard any real-value or trust-selling product until the
+  single-dealer hole is removed (setup ceremony or DKG). It is a launch-blocker, not a
+  caveat.
+
 ## Open items
 - No GitHub remote yet: CI/Actions and npm publish are validated locally only.
 - Sepolia run of the anchored demo pending SEPOLIA_RPC_URL +

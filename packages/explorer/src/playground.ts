@@ -15,6 +15,7 @@ import {
   type Reveal,
 } from './api';
 import { markSealRevealed, rememberSeal } from './attention';
+import { createCeremony, type Ceremony } from './ceremony';
 import { encryptPrivate, isPrivatePayload } from './privacy';
 import { decodePayload, esc, fmtCountdown, payloadBytes, truncMiddle } from './util';
 
@@ -119,6 +120,8 @@ export function renderPlayground(host: HTMLElement): () => void {
   let done = false;
   let steps: TraceStep[] = [];
   let lastRest = '';
+  /** The 3D seal scene, mounted once per run and driven by live share state. */
+  let ceremony: Ceremony | null = null;
 
   host.innerHTML = `
     <div class="playground card" id="pg">
@@ -595,7 +598,11 @@ export function renderPlayground(host: HTMLElement): () => void {
           batch?.finalize_ms != null
             ? `Lagrange combine + finalize in ${batch.finalize_ms} ms. all ${run.b} slots opened at once`
             : `all ${run.b} slots opened at once`);
+        // Let the scene's reveal burst play before the results replace it.
+        ceremony?.reveal();
+        await sleep(750);
         renderRevealed(reveal);
+        ceremony = null;
         return;
       }
     }
@@ -640,6 +647,7 @@ export function renderPlayground(host: HTMLElement): () => void {
                     title="copy ciphertext hash">${esc(truncMiddle(run.ctHash, 14, 10))}</button>
           </div>
           <p class="pg-status" id="pg-head"></p>
+          <div class="cer-mount" id="pg-ceremony"></div>
           <div id="pg-rest"></div>
           <p class="pg-links">
             <button type="button" class="btn" data-copy="${esc(sealLink(run))}">copy share link</button>
@@ -650,7 +658,14 @@ export function renderPlayground(host: HTMLElement): () => void {
       `;
       wireCopy(liveEl);
       lastRest = '';
+      // Fresh scene per run: encrypt -> split key -> hand shares to operators.
+      ceremony?.destroy();
+      ceremony = createCeremony({ n: run.n, t: run.t });
+      liveEl.querySelector('#pg-ceremony')!.appendChild(ceremony.el);
+      void ceremony.play();
     }
+
+    ceremony?.setVerified(verified);
 
     const company =
       run.scenario !== 'note' && others > 0
@@ -668,22 +683,9 @@ export function renderPlayground(host: HTMLElement): () => void {
     }
     liveEl.querySelector('#pg-head')!.innerHTML = stage;
 
-    const dots = Array.from({ length: run.n }, (_, i) => {
-      const cls =
-        status === 'frozen' || status === 'revealed'
-          ? i < verified
-            ? 'dot dot-done'
-            : 'dot dot-wait'
-          : 'dot';
-      return `<span class="${cls}" title="operator ${i + 1}"></span>`;
-    }).join('');
-    const rest = `
-      <div class="pg-operators" role="img" aria-label="${verified} of ${run.n} operator shares verified">
-        ${dots}
-        <span class="pg-operators-label">committee, any ${run.t} of ${run.n} reveal</span>
-      </div>
-      ${traceHtml()}
-    `;
+    // Operator state now lives in the 3D scene (#pg-ceremony); this region
+    // only carries the crypto trace, re-rendered when a step changes.
+    const rest = traceHtml();
     if (rest !== lastRest) {
       liveEl.querySelector('#pg-rest')!.innerHTML = rest;
       lastRest = rest;
@@ -793,6 +795,8 @@ export function renderPlayground(host: HTMLElement): () => void {
     wireCopy(liveEl);
     liveEl.querySelector<HTMLButtonElement>('#pg-again')?.addEventListener('click', () => {
       run = null;
+      ceremony?.destroy();
+      ceremony = null;
       liveEl.hidden = true;
       liveEl.innerHTML = '';
       form.hidden = false;
@@ -803,6 +807,7 @@ export function renderPlayground(host: HTMLElement): () => void {
   return () => {
     stopPolling();
     clearInterval(roundTimer);
+    ceremony?.destroy();
   };
 }
 

@@ -17,6 +17,7 @@ import {
 } from '../attention';
 import { wireCopy } from '../playground';
 import { decryptPrivate, isPrivatePayload } from '../privacy';
+import { createGathering, descramble, prefersReducedMotion } from '../reassemble';
 import { decodePayload, esc, fmtCountdown, fmtUnix, payloadBytes, truncMiddle } from '../util';
 
 const POLL_MS = 2000;
@@ -56,6 +57,7 @@ export function renderSealView(
   let renderedStatus = '';
   let pollTimer: number | undefined;
   let tickTimer: number | undefined;
+  let revealTimer: number | undefined;
 
   // The notify button lives inside re-renderable HTML; delegate the click.
   bodyEl.addEventListener('click', (e) => {
@@ -102,13 +104,23 @@ export function renderSealView(
       bodyEl.querySelector('#sv-cd')!.textContent = fmtCountdown(secs);
       setTabState(secs > 0 ? `⏳ ${fmtCountdownShort(secs)}` : '⏳ opening', '🔒');
     } else if (condition.status === 'frozen') {
-      renderedStatus = 'frozen';
       const batch = condition.batches?.[0];
       const verified = batch?.verified_shares ?? 0;
-      bodyEl.innerHTML = `
-        <p class="sv-countdown num">opening…</p>
-        <p class="muted">the cue fired. committee shares: ${verified} verified.</p>`;
-      setTabState('🔓 opening…', '🔓');
+      const total = batch?.total_shares ?? 5;
+      // Build the reassembly scene once; later ticks only update the count so
+      // the animation keeps its phase instead of restarting.
+      if (renderedStatus !== 'frozen') {
+        renderedStatus = 'frozen';
+        bodyEl.innerHTML = `
+          <div id="sv-gather"></div>
+          <p class="sv-reassemble">reassembling your secret from the committee.
+            <span class="num" id="sv-shares">${verified}</span> shares gathered.</p>`;
+        bodyEl.querySelector('#sv-gather')!.appendChild(createGathering(total));
+      } else {
+        const s = bodyEl.querySelector('#sv-shares');
+        if (s) s.textContent = String(verified);
+      }
+      setTabState('🔓 reassembling…', '🔓');
     } else if (condition.status === 'stalled') {
       renderedStatus = 'stalled';
       bodyEl.innerHTML = `
@@ -185,12 +197,29 @@ export function renderSealView(
         text = decoded.text;
         isHex = decoded.isHex;
       }
-      bodyEl.innerHTML = `
-        <p class="sv-content reveal-in ${isHex ? 'mono' : ''}">${esc(text)}</p>
-        <p class="muted">revealed ${esc(fmtUnix(reveal.revealed_at))}, slot ${slot.position} of ${reveal.slots.length}.
+      // The reveal moment: the committee's shares gather back into the core,
+      // then the plaintext materialises out of ciphertext-like noise. This
+      // plays even if the brief frozen window was never observed, so a link
+      // opened late still shows the secret coming back together.
+      const total = condition.batches?.[0]?.total_shares ?? 5;
+      const meta = `<p class="muted">revealed ${esc(fmtUnix(reveal.revealed_at))}, slot ${slot.position} of ${reveal.slots.length}.
           <a class="link" href="#/condition/${encodeURIComponent(conditionId)}">see the full batch,
           operator shares and timings</a></p>`;
-      wireCopy(bodyEl);
+      // descramble sets textContent, so no escaping is needed and no markup
+      // can slip in from the payload.
+      const materialize = () => {
+        bodyEl.innerHTML = `<p class="sv-content" id="sv-out"></p>${meta}`;
+        descramble(bodyEl.querySelector<HTMLElement>('#sv-out')!, text, { mono: isHex });
+        wireCopy(bodyEl);
+      };
+      if (prefersReducedMotion()) {
+        materialize();
+      } else {
+        bodyEl.innerHTML = `<div id="sv-gather"></div>
+          <p class="sv-reassemble">your secret is coming back together.</p>`;
+        bodyEl.querySelector('#sv-gather')!.appendChild(createGathering(total));
+        revealTimer = window.setTimeout(materialize, 1000);
+      }
     }
   };
 
@@ -207,6 +236,7 @@ export function renderSealView(
   return () => {
     if (pollTimer !== undefined) clearInterval(pollTimer);
     if (tickTimer !== undefined) clearInterval(tickTimer);
+    if (revealTimer !== undefined) clearTimeout(revealTimer);
     document.removeEventListener('visibilitychange', onVisible);
     setTabState(null);
   };

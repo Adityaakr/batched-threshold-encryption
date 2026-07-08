@@ -2137,3 +2137,424 @@ body.landing-page main {
     display: block !important;
   }
 }
+
+/* ---- sealing ceremony (3D scene) --------------------------------------- */
+/* Shows the real seal: encrypt in-tab, split the key into n shares, hand one
+   to each operator (any t reveal on cue). Depth via CSS perspective; all
+   motion is confined to the no-preference block below. */
+
+.cer {
+  margin: 16px 0 4px;
+}
+
+.cer-stage {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  height: 220px;
+  margin: 0 auto;
+  perspective: 900px;
+  perspective-origin: 50% 36%;
+}
+
+/* the committee plane, seen in perspective */
+.cer-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 86%;
+  height: 34%;
+  transform: translate(-50%, -50%) rotateX(72deg);
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    var(--accent-weak) 0%,
+    rgba(239, 246, 255, 0) 70%
+  );
+}
+
+/* soft contact shadow that grounds the core in the scene */
+.cer-floor {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 128px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(37, 99, 235, 0.16) 0%,
+    rgba(37, 99, 235, 0) 70%
+  );
+  z-index: 1;
+}
+
+/* the sealed ciphertext at the center */
+.cer-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+}
+
+.cer-core-glow {
+  position: absolute;
+  inset: -12px;
+  border-radius: 20px;
+  background: radial-gradient(
+    circle at center,
+    rgba(37, 99, 235, 0.2) 0%,
+    rgba(37, 99, 235, 0) 68%
+  );
+}
+
+.cer-core-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  background: linear-gradient(150deg, #fff 0%, var(--accent-weak) 100%);
+}
+
+.cer-core-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+}
+
+/* operator nodes, scaled by their depth on the ellipse */
+.cer-node {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(calc(0.58 + var(--depth) * 0.64));
+  opacity: calc(0.4 + var(--depth) * 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.cer-node-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+}
+
+.cer-node-tag {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+}
+
+/* armed: a share has landed */
+.cer[data-phase='distribute'] .cer-node-ring,
+.cer[data-phase='sealed'] .cer-node-ring,
+.cer[data-phase='reveal'] .cer-node-ring {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+/* verified: a real share passed the public check (driven live) */
+.cer-node.is-verified .cer-node-ring {
+  border-color: var(--green);
+  background: var(--green-weak);
+  box-shadow: 0 0 0 3px var(--green-weak);
+}
+
+/* key shards travelling from the core to each node */
+.cer-shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  z-index: 24;
+  display: none;
+}
+
+.cer-caption {
+  margin: 14px 0 0;
+  min-height: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cer-node-ring {
+    transition: border-color 0.35s ease, box-shadow 0.35s ease,
+      background 0.35s ease;
+  }
+
+  .cer[data-phase='distribute'] .cer-node-ring,
+  .cer[data-phase='sealed'] .cer-node-ring,
+  .cer[data-phase='reveal'] .cer-node-ring {
+    transition-delay: calc(var(--i) * 0.13s + 0.35s);
+  }
+
+  .cer-node.is-verified .cer-node-ring {
+    transition-delay: 0s;
+    animation: cer-verify 0.4s ease;
+  }
+
+  @keyframes cer-verify {
+    0% {
+      transform: scale(0.6);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* gentle life on the sealed core */
+  .cer-core {
+    animation: cer-float 4.2s ease-in-out infinite;
+  }
+
+  @keyframes cer-float {
+    0%,
+    100% {
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      transform: translate(-50%, -55%);
+    }
+  }
+
+  .cer[data-phase='encrypt'] .cer-core-face {
+    animation: cer-scramble 0.95s ease-in-out;
+  }
+
+  @keyframes cer-scramble {
+    0% {
+      transform: rotateY(0deg);
+    }
+    100% {
+      transform: rotateY(360deg);
+    }
+  }
+
+  .cer[data-phase='split'] .cer-core-face {
+    animation: cer-pop 0.55s ease;
+  }
+
+  @keyframes cer-pop {
+    0% {
+      transform: scale(1);
+    }
+    45% {
+      transform: scale(1.14);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .cer-shard {
+    display: block;
+    transition: left 0.6s cubic-bezier(0.35, 0.9, 0.35, 1),
+      top 0.6s cubic-bezier(0.35, 0.9, 0.35, 1), opacity 0.3s ease;
+    transition-delay: calc(var(--i) * 0.13s);
+  }
+
+  .cer[data-phase='split'] .cer-shard {
+    opacity: 1;
+  }
+
+  .cer[data-phase='distribute'] .cer-shard,
+  .cer[data-phase='sealed'] .cer-shard,
+  .cer[data-phase='reveal'] .cer-shard {
+    left: var(--tx);
+    top: var(--ty);
+    opacity: 1;
+  }
+
+  .cer[data-phase='sealed'] .cer-shard,
+  .cer[data-phase='reveal'] .cer-shard {
+    opacity: 0;
+    transition-delay: calc(var(--i) * 0.13s + 0.15s);
+  }
+
+  /* shards rise off the plane, then settle onto their operator */
+  .cer[data-phase='distribute'] .cer-shard {
+    animation: cer-fly 0.8s ease;
+    animation-delay: calc(var(--i) * 0.13s);
+  }
+
+  @keyframes cer-fly {
+    0% {
+      transform: scale(1);
+    }
+    45% {
+      transform: scale(1.55);
+    }
+    100% {
+      transform: scale(0.7);
+    }
+  }
+
+  /* sealed core has a slow 3D wobble and a breathing glow */
+  .cer[data-phase='sealed'] .cer-core-face,
+  .cer[data-phase='reveal'] .cer-core-face {
+    animation: cer-wobble 6s ease-in-out infinite;
+  }
+
+  @keyframes cer-wobble {
+    0%,
+    100% {
+      transform: rotateY(-14deg);
+    }
+    50% {
+      transform: rotateY(14deg);
+    }
+  }
+
+  .cer-core-glow {
+    animation: cer-glow 3.6s ease-in-out infinite;
+  }
+
+  @keyframes cer-glow {
+    0%,
+    100% {
+      opacity: 0.7;
+      transform: scale(0.94);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.06);
+    }
+  }
+
+  .cer[data-phase='reveal'] .cer-ring {
+    animation: cer-burst 0.85s ease-out;
+  }
+
+  @keyframes cer-burst {
+    0% {
+      box-shadow: 0 0 0 0 var(--green-weak);
+    }
+    100% {
+      box-shadow: 0 0 0 44px rgba(22, 163, 74, 0);
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .cer-stage {
+    height: 188px;
+  }
+}
+
+/* ---- recipient reveal: reassembly -------------------------------------- */
+/* The shares stream back into the core while the batch is frozen, then the
+   plaintext materialises out of noise (descramble). */
+
+.rga {
+  margin: 18px 0 4px;
+}
+
+.rga-stage {
+  position: relative;
+  width: 100%;
+  max-width: 240px;
+  height: 148px;
+  margin: 0 auto;
+}
+
+.rga-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+}
+
+.rga-core-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  border: 1.5px solid var(--accent);
+  background: linear-gradient(150deg, #fff 0%, var(--accent-weak) 100%);
+}
+
+.rga-core-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+}
+
+.rga-mote {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.sv-reassemble {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rga-core-face {
+    animation: rga-core-pulse 1.9s ease-in-out infinite;
+  }
+
+  @keyframes rga-core-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--accent-weak);
+    }
+    50% {
+      box-shadow: 0 0 0 9px rgba(37, 99, 235, 0.08);
+    }
+  }
+
+  .rga-mote {
+    animation: rga-pull 1.7s ease-in infinite;
+  }
+
+  @keyframes rga-pull {
+    0% {
+      left: var(--sx);
+      top: var(--sy);
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      left: 50%;
+      top: 50%;
+      opacity: 0;
+      transform: scale(1.15);
+    }
+  }
+}

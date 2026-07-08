@@ -20,8 +20,7 @@ const expectVerified = arg('expect-verified');
 const client = new BteClient({ url: process.env.BTE_DEVNET_URL ?? 'http://localhost:8080' });
 
 const committee = await client.committee();
-console.log(`committee: ${committee.n} operators, threshold ${committee.t}, batch size ${committee.b}`);
-console.log(`trust model: ${committee.trustModel}\n`);
+console.log(`committee: ${committee.n} operators, threshold ${committee.t}, batch size ${committee.b}\n`);
 
 const conditionId = await client.condition({ in: inSecs });
 console.log(`auction closes in ${inSecs}s (condition ${conditionId})\n`);

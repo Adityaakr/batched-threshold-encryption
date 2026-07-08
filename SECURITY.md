@@ -1,7 +1,6 @@
 # Security
 
-bte is an UNAUDITED prototype. The v0 trust model is dealer-trusted. Do not
-protect real value with it.
+bte is an UNAUDITED prototype. The v0 trust model is dealer-trusted.
 
 ## Trust model (v0)
 

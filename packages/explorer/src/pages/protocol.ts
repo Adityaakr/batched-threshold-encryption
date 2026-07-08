@@ -625,8 +625,8 @@ console.log(slot.text);</code></pre>
           </div>
         </div>
         <p class="warning"><strong>v0 is dealer-trusted and unaudited.</strong> Use it for
-        testnets, demos, and integration work. Do not protect real value with it. DKG and an
-        independent audit are prerequisites for that claim.</p>
+        testnets, demos, and integration work. DKG and an
+        independent audit are prerequisites for a stronger claim.</p>
         <div class="article-links">
           <a class="link" href="https://eprint.iacr.org/2026/760" target="_blank" rel="noopener">the paper</a>
           <a class="link" href="https://github.com/commonwarexyz/simple-bte" target="_blank" rel="noopener">simple-bte</a>

@@ -13,7 +13,6 @@ export interface CommitteeDetail {
   params_b64: string;
   params_digest: string;
   created_at: number;
-  trust_model: string;
 }
 
 export interface ConditionSummary {

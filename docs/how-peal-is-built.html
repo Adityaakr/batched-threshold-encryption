@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How Peal is built, crate by crate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg1: #dcebfa; --bg2: #eaf3fc; --bg3: #f6f9fd;
+    --text: #111827; --muted: #6b7280; --muted-soft: #9ca3af; --border: #e5e7eb;
+    --accent: #2563eb; --green: #16a34a; --red: #dc2626; --leaf: #00737f;
+    --card: #ffffff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, 'SF Mono', monospace;
+    --heading: 'Josefin Sans', system-ui, -apple-system, sans-serif;
+    --body: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 30%, var(--bg3) 100%); background-attachment: fixed; }
+  body {
+    margin: 0; color: var(--text); font-family: var(--body);
+    font-size: 17px; line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 800px; margin: 0 auto; padding: 96px 24px 120px; }
+
+  /* header, centered like the philosophy page */
+  .doc-header { text-align: center; margin-bottom: 104px; }
+  .doc-kicker {
+    font-family: var(--body); font-size: 12px; font-weight: 500;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
+    margin: 0 0 22px; display: inline-flex; align-items: center; gap: 9px;
+  }
+  .doc-kicker svg { display: block; }
+  h1 {
+    font-family: var(--heading); font-weight: 400;
+    font-size: clamp(31px, 4.6vw, 46px); letter-spacing: -0.005em;
+    line-height: 1.22; text-wrap: balance; margin: 0 0 24px; color: var(--text);
+  }
+  .lede {
+    font-size: 19px; color: #4b5563; margin: 0 auto; max-width: 640px;
+    line-height: 1.6;
+  }
+  .meta { margin-top: 26px; font-size: 13px; color: var(--muted-soft); font-family: var(--mono); }
+
+  /* numbered blocks, philosophy tenet pattern */
+  .block {
+    display: grid; grid-template-columns: 64px 1fr; gap: 0 20px;
+    border-top: 1px solid var(--border); padding-top: 44px; margin-bottom: 76px;
+  }
+  .gutter {
+    font-family: var(--heading); font-size: 19px; font-weight: 300;
+    color: var(--muted-soft); line-height: 1.5; padding-top: 4px;
+  }
+  .section-kicker {
+    font-family: var(--body); font-size: 12px; font-weight: 500;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);
+    margin: 0 0 16px;
+  }
+  h2 {
+    font-family: var(--heading); font-size: 27px; font-weight: 400;
+    letter-spacing: 0; line-height: 1.32; text-wrap: balance;
+    margin: 0 0 18px; color: var(--text);
+  }
+  h3 {
+    font-family: var(--heading); font-size: 20px; font-weight: 400;
+    line-height: 1.4; margin: 34px 0 6px; color: var(--text);
+  }
+  p { margin: 15px 0; }
+  em { font-style: italic; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .lead-in { font-weight: 500; color: var(--text); }
+
+  code {
+    font-family: var(--mono); font-size: 0.85em; background: #eef2f7;
+    padding: 2px 6px; border-radius: 5px; color: #334155;
+  }
+  pre {
+    background: #f7f9fc; border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; overflow-x: auto; font-family: var(--mono);
+    font-size: 13px; line-height: 1.65; margin: 22px 0; color: #1f2937;
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .tok-c { color: #94a3b8; }
+  .tok-k { color: #2563eb; }
+  .tok-f { color: #7c3aed; }
+  .tok-s { color: #15803d; }
+  .path { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--muted-soft); margin: 24px 0 -12px; }
+
+  figure { margin: 34px 0; }
+  figcaption { font-size: 12px; color: var(--muted-soft); text-align: center; margin-top: 14px; font-family: var(--mono); }
+  .diagram { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 26px 0; font-size: 15px; }
+  th, td { text-align: left; padding: 12px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-weight: 500; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  td code { font-size: 0.8em; }
+
+  ul { padding-left: 20px; margin: 15px 0; }
+  li { margin: 9px 0; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: #374151; }
+
+  .close { border-top: 1px solid var(--border); padding-top: 64px; margin-top: 24px; text-align: center; }
+  .signoff { font-family: var(--heading); font-size: 27px; font-weight: 400; letter-spacing: 0.01em; margin: 0 0 10px; color: var(--text); }
+  .close p.sub { color: var(--muted); font-size: 16px; margin: 0; }
+
+  footer { margin-top: 76px; padding-top: 26px; border-top: 1px solid var(--border); font-size: 14px; line-height: 1.7; color: var(--muted); }
+  footer code { font-size: 0.82em; }
+
+  /* shared scroll reveal (philosophy + protocol pattern) */
+  @media (prefers-reduced-motion: no-preference) {
+    .scroll-reveal {
+      opacity: 0; transform: translateY(22px); filter: blur(14px);
+      transition:
+        opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 700ms cubic-bezier(0.16, 1, 0.3, 1),
+        filter 700ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .scroll-reveal.is-visible { opacity: 1; transform: none; filter: blur(0); }
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 56px 18px 90px; }
+    .doc-header { margin-bottom: 64px; }
+    .block { grid-template-columns: 1fr; gap: 0; padding-top: 36px; margin-bottom: 60px; }
+    .gutter { padding-top: 0; margin-bottom: 14px; font-size: 16px; }
+    h1 { font-size: 30px; }
+    .lede { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header scroll-reveal">
+    <p class="doc-kicker">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2c4 3 6 6 6 10a6 6 0 0 1-12 0c0-4 2-7 6-10z" fill="#00737f"/><path d="M12 6c2 2 3 4 3 6a3 3 0 0 1-6 0c0-2 1-4 3-6z" fill="#005866"/></svg>
+      peal network · engineering
+    </p>
+    <h1>How Peal is built, crate by crate</h1>
+    <p class="lede">A reveal-later encryption network is five Rust crates, one wasm bridge, a TypeScript SDK, and a browser app. This is the whole thing wired together: what each part does, why it exists, and how a single secret travels from a browser tab to a committee and back.</p>
+    <p class="meta">grounded in the source · phases 0-8 green</p>
+  </header>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">01</div>
+    <div class="content">
+      <p class="section-kicker">the problem</p>
+      <h2>Holding time is not a thing one machine can do</h2>
+      <p>Encryption keeps a secret from outsiders. It says nothing about <em>when</em> the holder of the key chooses to look. "Encrypted" only ever means "someone has the key," and that someone can always peek early. So there is no ordinary way to send a message that literally cannot be opened until a set moment, without trusting a person or a server not to look.</p>
+      <p>Peal turns "cannot be read until later" into a property of the message itself. You seal a payload to a committee of operators. No single operator can open it. Only when a cue fires, a wall-clock time or a chain height, does the whole batch open at once, reconstructed from a threshold of operator shares. Nothing is readable early, not even by the operators, as long as fewer than the threshold collude.</p>
+      <p>The scheme underneath is commonware's batched threshold encryption over the BLS12-381 pairing curve. Peal is the plumbing that turns that scheme into a running network: a coordinator, operator nodes, a client SDK that seals in the browser, and an explorer that watches it happen. The tagline in the code is literal: <span class="pill">seal now. reveal on cue.</span></p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">02</div>
+    <div class="content">
+      <p class="section-kicker">the shape</p>
+      <h2>Six programs, one crypto core</h2>
+      <p>Everything is a workspace: five Rust crates plus a wasm target, a TypeScript SDK, and a browser app. The rule that keeps the system honest is that exactly one crate is allowed to touch elliptic-curve group elements. Everything else moves opaque bytes around.</p>
+
+      <figure>
+        <div class="diagram">
+          <svg viewBox="0 0 760 520" width="100%" role="img" aria-labelledby="diagram-title diagram-desc">
+            <title id="diagram-title">Peal network architecture</title>
+            <desc id="diagram-desc">A browser seals a payload in wasm and posts the ciphertext to the coordinator over the /v0 HTTP API. Five operator nodes poll the coordinator for work and post back partial-decryption shares. The bte-cli dealer ceremony produces public params and encrypted keystores that seed the coordinator and the operators. bte-crypto is the shared crypto core. On reveal the coordinator publishes payloads and a merkle root, optionally anchored to a contract.</desc>
+            <defs>
+              <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 z" fill="#94a3b8"/></marker>
+              <marker id="arrb" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 z" fill="#2563eb"/></marker>
+            </defs>
+            <rect x="24" y="40" width="200" height="96" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
+            <text x="124" y="70" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">browser</text>
+            <text x="124" y="92" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="#2563eb">bte-sdk + wasm</text>
+            <text x="124" y="112" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">seal() client-side</text>
+
+            <rect x="280" y="200" width="200" height="120" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+            <text x="380" y="232" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">bte-coordinator</text>
+            <text x="380" y="254" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">axum /v0 · sqlite</text>
+            <text x="380" y="272" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">engine tick 500ms</text>
+            <text x="380" y="296" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">holds no key material</text>
+
+            <rect x="536" y="40" width="200" height="120" rx="12" fill="#f0fdf4" stroke="#bbf7d0"/>
+            <text x="636" y="70" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">bte-node × 5</text>
+            <text x="636" y="92" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">poll /v0/work</text>
+            <text x="636" y="110" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">partial() → share</text>
+            <text x="636" y="134" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#16a34a">encrypted keystore</text>
+
+            <rect x="280" y="40" width="200" height="96" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+            <text x="380" y="70" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">bte-cli</text>
+            <text x="380" y="92" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#9a3412">dealer ceremony</text>
+            <text x="380" y="112" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">samples τ, drops τ</text>
+
+            <rect x="280" y="384" width="200" height="70" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+            <text x="380" y="414" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">bte-crypto</text>
+            <text x="380" y="435" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">the only crate touching G1 / G2</text>
+
+            <rect x="536" y="200" width="200" height="70" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+            <text x="636" y="230" text-anchor="middle" font-family="'Josefin Sans', sans-serif" font-size="16" font-weight="500" fill="#111827">BteAnchor.sol</text>
+            <text x="636" y="251" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10.5" fill="#6b7280">merkle root onchain</text>
+
+            <path d="M150 136 C 170 180, 250 200, 300 205" fill="none" stroke="#2563eb" stroke-width="1.6" marker-end="url(#arrb)"/>
+            <text x="196" y="182" font-family="ui-monospace, monospace" font-size="10" fill="#2563eb">POST /v0/ciphertexts</text>
+            <path d="M536 132 C 470 170, 460 185, 470 200" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arr)"/>
+            <path d="M480 232 C 520 232, 540 190, 560 162" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arr)"/>
+            <text x="470" y="150" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">GET /v0/work</text>
+            <text x="486" y="212" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">POST /v0/shares</text>
+            <path d="M380 136 L380 200" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arr)"/>
+            <text x="388" y="172" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">params</text>
+            <path d="M480 88 L536 88" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arr)"/>
+            <text x="484" y="80" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">keystores</text>
+            <path d="M300 384 C 250 350, 250 300, 300 280" fill="none" stroke="#c7d2fe" stroke-width="1.4" stroke-dasharray="4 4"/>
+            <path d="M460 384 C 520 300, 560 200, 600 160" fill="none" stroke="#c7d2fe" stroke-width="1.4" stroke-dasharray="4 4"/>
+            <path d="M360 384 C 340 250, 250 150, 224 110" fill="none" stroke="#c7d2fe" stroke-width="1.4" stroke-dasharray="4 4"/>
+            <text x="298" y="372" font-family="ui-monospace, monospace" font-size="9.5" fill="#818cf8">used by every program</text>
+            <path d="M480 250 L536 240" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arr)"/>
+            <text x="486" y="232" font-family="ui-monospace, monospace" font-size="10" fill="#6b7280">reveal root</text>
+          </svg>
+        </div>
+        <figcaption>solid = HTTP calls · dashed = compile-time dependency on the crypto core</figcaption>
+      </figure>
+
+      <table>
+        <thead><tr><th>program</th><th>what it is</th><th>what it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>bte-crypto</code></td><td>the crypto core</td><td>The only crate touching group elements. Wraps commonware's simple-bte (pinned at rev <code>147a0878</code>), adds wire formats, payload caps, and per-slot validity.</td></tr>
+          <tr><td><code>bte-coordinator</code></td><td>the server</td><td>axum <code>/v0</code> REST API over a single sqlite connection. Runs the engine that freezes batches, gathers shares, and builds reveals. Holds no key material.</td></tr>
+          <tr><td><code>bte-node</code></td><td>an operator</td><td>Stateless poller. Reads <code>/v0/work</code>, computes one 48-byte share per frozen batch, posts it back. Secrets live in an encrypted keystore.</td></tr>
+          <tr><td><code>bte-cli</code></td><td>the dealer + tools</td><td>Runs the v0 trusted-dealer ceremony, registers committees, and drives the end-to-end smoke test.</td></tr>
+          <tr><td><code>bte-wasm</code></td><td>the browser bridge</td><td>wasm-bindgen shim over <code>bte-crypto</code>. Seal-only by default, so a browser can encrypt without ever shipping a secret.</td></tr>
+          <tr><td><code>bte-sdk</code></td><td>the client</td><td>TypeScript package with the wasm inlined as base64. One class, <code>BteClient</code>: <code>condition</code>, <code>seal</code>, <code>status</code>, <code>reveal</code>.</td></tr>
+          <tr><td><code>explorer</code></td><td>the app</td><td>Vanilla TypeScript + Vite playground. Seals in the browser, watches the committee verify shares live, plays the reveal.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">03</div>
+    <div class="content">
+      <p class="section-kicker">the core</p>
+      <h2>bte-crypto, the one crate that touches the curve</h2>
+      <p>All pairing math, group FFTs, and the batched-threshold scheme itself live in simple-bte. <code>bte-crypto</code> is a thin, opinionated surface over it: wire types prefixed with the magic <code>BTE0</code>, a 4096-byte payload cap, and an API shaped for the coordinator, node, and SDK. Two feature flags split the surface. <code>seal-only</code> is just wire types plus <code>seal</code>, which is exactly what the wasm build compiles. <code>full</code> adds the operator and recovery side.</p>
+      <p>The whole cryptographic protocol reduces to seven functions. Read them in order and you have the entire lifecycle.</p>
+
+      <span class="path">crates/bte-crypto/src/lib.rs</span>
+<pre><code><span class="tok-c">// client side, browser-safe (seal-only feature)</span>
+<span class="tok-k">pub fn</span> <span class="tok-f">seal</span>(params: &PublicParams, payload: &[u8], rng) -> SealedCiphertext
+
+<span class="tok-c">// dealer side, run once per committee (full feature)</span>
+<span class="tok-k">pub fn</span> <span class="tok-f">ceremony</span>(n, t, b, rng) -> (PublicParams, Vec&lt;OperatorSecret&gt;)
+
+<span class="tok-c">// operator side, once per frozen batch</span>
+<span class="tok-k">pub fn</span> <span class="tok-f">partial</span>(secret: &OperatorSecret, batch: &[CtHeader]) -> Share
+<span class="tok-k">pub fn</span> <span class="tok-f">verify_share</span>(params, batch: &[CtHeader], share: &Share) -> bool
+
+<span class="tok-c">// recovery side, run by the coordinator at reveal</span>
+<span class="tok-k">pub fn</span> <span class="tok-f">pre_decrypt</span>(rk: &RecoveryKey, batch) -> PrecomputedCrossTerms
+<span class="tok-k">pub fn</span> <span class="tok-f">combine</span>(shares: &[Share]) -> CombinedShare
+<span class="tok-k">pub fn</span> <span class="tok-f">finalize</span>(rk, pre, combined, batch) -> Vec&lt;RecoveredPayload&gt;</code></pre>
+
+      <h3>What a sealed ciphertext actually is</h3>
+      <p>A <code>SealedCiphertext</code> is three fields: a 48-byte G1 point <code>ct0</code> (the KEM header, written <code>[k]_1</code>), a 16-byte key mask <code>ct1</code>, and a payload-length keystream body <code>ct2</code>. That first 48-byte point is the only thing an operator needs to do its job. It never sees the body. The payload path is the Fujisaki-Okamoto transform (<code>simple_bte::bte::fo</code>), used here as a CCA-secure data-encapsulation layer, not the G_T / Schnorr variant.</p>
+
+      <h3>Why B is baked in, and why there are dummies</h3>
+      <p>The scheme is <em>batched</em>. The committee's setup fixes a batch size B (64 in this deployment) into the punctured powers-of-tau, the FFT domain, and the encryption key. Every batch must be exactly B slots. That single fact explains a design choice that looks strange at first: when a real batch has fewer than B ciphertexts, the coordinator pads it with self-sealed dummies. Each dummy is a real FO ciphertext sealing <code>BTE_DUMMY_V0:</code> plus 16 random bytes. Operators do real work on them, they are committed in the merkle root with everything else, and they are indistinguishable on the wire except for their position. Padding is not decoration, it is what makes the fixed-B math close.</p>
+
+      <h3>One share for a whole batch, 48 bytes</h3>
+      <p>An operator's partial decryption for an entire frozen batch is a <em>single</em> G1 point, independent of B. It is one multi-scalar multiplication, <code>pd_j = sum_i sigma_j^i · ct_{i,0}</code>, the operator's Shamir shares against the batch's headers. So the network cost of decrypting 64 sealed messages is one 48-byte upload per operator, not 64.</p>
+      <p class="lead-in">Public verifiability is the load-bearing property.</p>
+      <p>Anyone with the public params can check a share with a pairing equation, <code>e(pd_j, g_2) == prod_i e(ct_{i,0}, v_j^i)</code>, and it returns false rather than panicking on any mismatch. This is what lets the coordinator, which holds no secrets, reject a lying operator without being able to decrypt anything itself. A byzantine node's share is flagged and never counted toward the threshold.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">04</div>
+    <div class="content">
+      <p class="section-kicker">the lifecycle</p>
+      <h2>Following one secret from tab to reveal</h2>
+      <p>Here is the whole path, step by step, with the real function at each hop.</p>
+
+      <h3>1. A condition is created</h3>
+      <p>The SDK's <code>condition({in: 60})</code> or <code>{atBlock: {chainId, height}}</code> posts to <code>/v0/conditions</code>. A condition is the cue: fire at a wall-clock time, or when a chain reaches a height. It starts in status <code>pending</code>.</p>
+
+      <h3>2. The secret is sealed in the browser</h3>
+      <p>This is the part people miss: encryption happens client-side, in wasm, before anything leaves the tab. <code>BteClient.seal</code> fetches the committee's public params once, parses them inside wasm (which subgroup-checks every point), and calls <code>params.seal(bytes)</code>. Only the ciphertext is posted to <code>/v0/ciphertexts</code>. The plaintext never touches the network.</p>
+
+      <span class="path">packages/sdk/src/index.ts</span>
+<pre><code><span class="tok-k">const</span> { params } = <span class="tok-k">await</span> <span class="tok-f">this</span>.ensureParams();
+<span class="tok-k">const</span> sealed = params.<span class="tok-f">seal</span>(bytes);         <span class="tok-c">// wasm, in-tab</span>
+<span class="tok-k">await</span> <span class="tok-f">this</span>.<span class="tok-f">request</span>(<span class="tok-s">'/v0/ciphertexts'</span>, {  <span class="tok-c">// only ciphertext leaves</span>
+  method: <span class="tok-s">'POST'</span>,
+  body: <span class="tok-f">JSON</span>.<span class="tok-f">stringify</span>({ condition_id, sealed_blob_b64: sealedB64 }),
+});</code></pre>
+
+      <p>The SDK also verifies that the params digest it computed in wasm matches the digest the coordinator advertised, so a coordinator that served inconsistent params is caught before you seal to it.</p>
+
+      <h3>3. The cue fires and the batch freezes</h3>
+      <p>The coordinator's engine ticks on an interval (<code>tick</code> in <code>engine.rs</code>, every 500ms in production). On each tick it finds conditions whose time has passed, or polls the referenced chain's head via <code>eth_blockNumber</code> for block conditions. When one is due it freezes:</p>
+      <ul>
+        <li>Real ciphertexts are sorted by <code>ct_hash</code>, so their positions are a pure function of the ciphertext set, not of arrival order. Nobody can buy slot zero.</li>
+        <li>The tail is padded with dummies up to a multiple of B.</li>
+        <li>Positions are assigned, batch rows are written, status becomes <code>frozen</code>.</li>
+        <li><span class="lead-in">Pipelining:</span> the coordinator immediately runs <code>pre_decrypt</code> for each batch. The cross-terms depend only on the ciphertexts and public params, not on any share, so this expensive FFT step runs <em>before</em> a single operator has responded. The result is cached in memory keyed by batch id.</li>
+      </ul>
+
+      <h3>4. Operators do their one job</h3>
+      <p>Each <code>bte-node</code> is a stateless poller. It hits <code>GET /v0/work?operator=N</code>, gets back the packed 48-byte headers for every frozen batch it has not answered, computes <code>partial(secret, headers)</code>, and posts the 48-byte share to <code>/v0/shares</code>. Then it sleeps and does it again. It is safe to restart at any point, because it holds no state beyond its encrypted keystore.</p>
+
+      <span class="path">crates/bte-node/src/main.rs</span>
+<pre><code><span class="tok-k">let</span> share = <span class="tok-k">if</span> cfg.byzantine {
+    <span class="tok-f">random_invalid_share</span>(cfg.operator_id)   <span class="tok-c">// dev-only, gated behind BTE_DEV=1</span>
+} <span class="tok-k">else</span> {
+    <span class="tok-f">partial</span>(secret, &headers)?              <span class="tok-c">// one MSM, 48 bytes out</span>
+};</code></pre>
+
+      <h3>5. Shares are verified at the door</h3>
+      <p>When a share lands, the coordinator runs <code>verify_share</code> inline before storing it. A share that fails the pairing check is stored <em>flagged</em> and never counts toward the threshold t. This is the whole byzantine-tolerance story: a malicious operator cannot poison a reveal, it can only decline to help. A batch finalizes the moment it has t verified shares.</p>
+
+      <h3>6. Finalize and reveal</h3>
+      <p>Once a batch has t good shares, the engine combines them by Lagrange interpolation at x=0 (<code>combine</code>), then <code>finalize</code> runs B pairings against the cached cross-terms and opens every slot. Finalize also re-derives each slot's randomness and checks <code>[k_i]_1 == ct0_i</code>, so one mauled ciphertext is marked invalid instead of corrupting its neighbours. When every batch in a condition is finalized, the coordinator assembles the reveal, computes a merkle root over <code>(position, payload)</code> leaves, and flips the condition to <code>revealed</code>.</p>
+
+      <p class="lead-in">Liveness has a real boundary.</p>
+      <p>The guarantee is "opens when the cue fires" only if at least t operators are honest and online. If a frozen batch waits past <code>REVEAL_TIMEOUT_SECS</code> without reaching t, it is marked <code>stalled</code> rather than silently hanging. Stalled conditions still finalize if late shares arrive. The reveal endpoint <code>/v0/reveals/:id</code> returns 404 until the reveal exists, enforced by a test that greps the database for plaintext before reveal.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">05</div>
+    <div class="content">
+      <p class="section-kicker">the server</p>
+      <h2>Inside the coordinator</h2>
+      <p>The coordinator is deliberately boring where it can be and careful where it must be. It is axum over a single <code>Mutex&lt;Connection&gt;</code> to sqlite. The entire public surface is nine routes under <code>/v0</code>: conditions, ciphertexts, work, shares, reveals, committees, and health. CORS is hand-rolled middleware (no new dependency), and there is a per-IP token-bucket rate limiter in front of everything.</p>
+      <p>The one piece of real machinery is the engine, a state machine over four condition states:</p>
+
+      <table>
+        <thead><tr><th>state</th><th>meaning</th><th>transition</th></tr></thead>
+        <tbody>
+          <tr><td><code>pending</code></td><td>accepting ciphertexts, cue not yet met</td><td>time passed or block reached → freeze</td></tr>
+          <tr><td><code>frozen</code></td><td>padded, positioned, pre-decrypted, awaiting shares</td><td>every batch hits t verified → reveal</td></tr>
+          <tr><td><code>revealed</code></td><td>payloads and merkle root published</td><td>terminal</td></tr>
+          <tr><td><code>stalled</code></td><td>waited past timeout without t shares</td><td>still finalizes if late shares arrive</td></tr>
+        </tbody>
+      </table>
+
+      <p>A subtle correctness detail: the pre-decrypt cross-terms live in an in-memory map, not the database. If the coordinator restarts between freeze and finalize, that cache is empty, so <code>finalize_batch</code> detects the miss and recomputes the cross-terms on the fly before combining. The system survives a restart at any point in a batch's life without losing a reveal.</p>
+      <p class="lead-in">What the coordinator cannot do:</p>
+      <p>It never holds tau, and it never holds an operator's shares. It stores ciphertexts, routes headers to operators, verifies and counts shares, and runs the public recovery math once t shares exist. It cannot decrypt anything early on its own, because decryption fundamentally requires t operator shares it does not have. It is trusted for liveness and for honest ordering, not for confidentiality.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">06</div>
+    <div class="content">
+      <p class="section-kicker">the operator</p>
+      <h2>Keystores and the byzantine switch</h2>
+      <p>An operator's secret is Shamir shares of tau^1..tau^B. At rest it lives in an encrypted keystore: argon2id derives a key from a passphrase, ChaCha20-Poly1305 encrypts the wire bytes. The struct deliberately has no <code>Debug</code> impl, and no code path logs key material. Cloud deploys that cannot share a volume can inject the encrypted keystore JSON through an env var instead of a file.</p>
+
+      <span class="path">crates/bte-node/src/keystore.rs</span>
+<pre><code><span class="tok-k">pub fn</span> <span class="tok-f">seal_keystore</span>(secret: &OperatorSecret, passphrase: &str) -> KeystoreFile {
+    <span class="tok-k">let</span> key = <span class="tok-f">derive_key</span>(passphrase, &salt)?;    <span class="tok-c">// argon2id</span>
+    <span class="tok-k">let</span> cipher = ChaCha20Poly1305::<span class="tok-f">new</span>((&key).into());
+    <span class="tok-c">// plaintext = OperatorSecret BTE_WIRE_V0 bytes, never touches a log</span>
+}</code></pre>
+
+      <p>The <code>--byzantine</code> flag posts a wire-valid but cryptographically wrong share (a random G1 point). It refuses to start unless <code>BTE_DEV=1</code>. This exists so the test suite can prove the coordinator flags and rejects bad shares, and it is exactly what the <code>demo-byzantine</code> run exercises: node 5 is killed mid-flow, node 2 lies, the reveal still completes on three honest shares.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">07</div>
+    <div class="content">
+      <p class="section-kicker">the bridge</p>
+      <h2>How the browser seals without a backend round trip</h2>
+      <p><code>bte-wasm</code> is a small wasm-bindgen surface over <code>bte-crypto</code>. It exposes a <code>Params</code> object you construct once (parsing subgroup-checks every point) and reuse, plus <code>seal</code> and a content-address helper. The SDK's build step inlines the compiled wasm as base64, so there is no bundler config to get right in Vite, Next, or Node. The first call lazily initializes the module from the inlined bytes.</p>
+      <p>The <code>getrandom</code> wiring is the fiddly part and worth naming, because it bites everyone who tries this. The wasm build needs a cargo cfg selecting the <code>wasm_js</code> backend, and the workspace pins its RNG to the exact version simple-bte's API expects (ark-std 0.6 re-exports rand 0.8). Downstream code uses <code>bte_crypto::os_rng()</code> rather than depending on <code>rand</code> directly, so the two rand versions in the tree can never silently diverge.</p>
+      <p>On top of the base scheme, the explorer adds an optional AES-128-GCM layer for private seals, with the symmetric key living only in the share-link URL fragment (which never reaches a server). That is how a "time capsule" link stays unreadable even to someone watching the coordinator: the committee opens the outer capsule, but the inner content needs the key that only travelled in the <code>#</code> fragment.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">08</div>
+    <div class="content">
+      <p class="section-kicker">the proof</p>
+      <h2>Making a reveal checkable by a stranger</h2>
+      <p>The reveal is not "trust the coordinator's JSON." Every reveal carries a merkle root over its slots, <code>leaf = sha256(position_le_u32 || payload)</code>, parents <code>sha256(left || right)</code>, odd nodes promoted. The SDK reimplements the exact same tree in <code>computeRevealRoot</code>, so a client can recompute the root from the payloads it received and confirm the coordinator did not reshuffle or edit anything.</p>
+      <p>Optionally, that root is anchored onchain. The anchor helpers are dependency-free: calldata is hand-encoded for fixed <code>bytes32</code> arguments, reads go through a raw <code>eth_call</code>, hashing through WebCrypto, so the SDK pulls in no chain library. <code>verifyAnchor</code> closes the loop: it recomputes the root from the revealed payloads, reads the root the key-holder published to <code>BteAnchor.sol</code>, and returns <code>matches</code> only when the onchain root, the recomputed root, and the coordinator's stated root all agree.</p>
+
+      <span class="path">packages/sdk/src/anchor.ts</span>
+<pre><code>matches: onchainRoot === recomputedRoot && recomputedRoot === reveal.merkleRoot</code></pre>
+
+      <p>The coordinator itself stays chain-free. The reveal-root transaction is sent by a key-holder script, not the server, so the coordinator never needs a funded key or an RPC to a mainnet.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">09</div>
+    <div class="content">
+      <p class="section-kicker">trade-offs</p>
+      <h2>The decisions worth defending</h2>
+      <p class="lead-in">One crate touches the curve, on purpose.</p>
+      <p>Keeping every group operation inside <code>bte-crypto</code> means the coordinator, node, and SDK all move opaque, wire-checked bytes. A bug in the pairing math has exactly one place to be. It also made the wasm surface trivial: the browser links the same <code>seal</code> the server does.</p>
+      <p class="lead-in">FO as the payload path, not G_T.</p>
+      <p>The Fujisaki-Okamoto transform gives CCA security and lets a payload be arbitrary bytes up to the cap, rather than a group element. The cost is the per-slot re-derivation check at finalize, which is also what buys the "one mauled ciphertext cannot poison the batch" property. That was a deliberate trade recorded in the deviations notes.</p>
+      <p class="lead-in">The coordinator is trusted for liveness, not secrecy.</p>
+      <p>A malicious coordinator can refuse service, stall a reveal, or lie about which ciphertexts exist, which is exactly why positions are content-derived and reveals are merkle-committed. It cannot read a sealed payload early, because that needs t operator shares it does not hold.</p>
+      <p class="lead-in">The real caveat: v0 uses a single trusted dealer.</p>
+      <p>The ceremony that creates a committee samples tau in one process, Shamir-deals the shares, and drops tau. While it ran, that one process knew tau, and tau can decrypt anything sealed to the committee. The code says so out loud: the ceremony prints "this process was the trusted dealer. tau is gone." Peal's whole value is trust-minimization, so this single-dealer setup is treated as a launch blocker, not a footnote. The fix is a multi-party setup ceremony (secure if one contributor is honest) or full distributed key generation. Until then, the honest use cases are low-stakes and non-adversarial.</p>
+    </div>
+  </section>
+
+  <section class="block scroll-reveal">
+    <div class="gutter">10</div>
+    <div class="content">
+      <p class="section-kicker">results and next</p>
+      <h2>Where it stands, and what finishes the picture</h2>
+      <p>Phases 0 through 8 are green: the crypto crate's property tests, the coordinator's invariant tests (including the byzantine-share and stall-recovery cases), a live end-to-end run against a five-node Docker network, the SDK's vitest suite, and the anchored-reveal test against a local chain. Measured on an M-series laptop, single process: seal about 416µs, one operator partial about 1.16ms, share verification about 12ms, and full batch recovery (pre-decrypt plus finalize for B=64) about 282ms, end-to-end recovery about 432ms. Those track the paper's published scale. The committee runs at n=5, t=3, B=64: three honest, online operators are enough to open a batch; two colluding operators learn nothing.</p>
+      <p>Two things turn this from a working system into the network it claims to be. First, remove the single dealer, so "no one can peek early" is verifiable by a stranger rather than resting on one machine's promise to delete tau. Second, put it under one real workload with real stakes, the sealed-bid or sealed-order-flow case, where being unreadable-until-the-cue is worth paying for. The cryptography is done. The trust boundary and the first serious user are what remain.</p>
+    </div>
+  </section>
+
+  <div class="close scroll-reveal">
+    <p class="signoff">seal now. reveal on cue.</p>
+    <p class="sub">the plumbing, in full.</p>
+  </div>
+
+  <footer class="scroll-reveal">
+    <p>Grounded in the source: <code>crates/bte-crypto/src/lib.rs</code>, <code>crates/bte-coordinator/src/{engine,api,merkle}.rs</code>, <code>crates/bte-node/src/{main,keystore}.rs</code>, <code>crates/bte-cli/src/main.rs</code>, <code>crates/bte-wasm/src/lib.rs</code>, <code>packages/sdk/src/{index,anchor,wasm}.ts</code>. Not covered here: the sqlite schema and migrations, the explorer's rendering and animation code, the Docker and Caddy deployment stack, and the full wire-format byte layouts (see <code>spec/index.md</code> and <code>spec/API-MAP.md</code>).</p>
+  </footer>
+
+</div>
+
+<script>
+  // Shared scroll-reveal, mirroring packages/explorer/src/reveal.ts: soft
+  // (blurred, low, transparent) blocks settle into focus. Above-fold blocks
+  // stagger in on load 110ms apart; below-fold reveal on first scroll into
+  // view, once. Reduced motion shows everything immediately.
+  (function () {
+    var blocks = Array.prototype.slice.call(document.querySelectorAll('.scroll-reveal'));
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    if (reduce.matches) {
+      blocks.forEach(function (b) { b.classList.add('is-visible'); });
+      return;
+    }
+    var fold = window.innerHeight;
+    var onLoad = blocks.filter(function (b) { return b.getBoundingClientRect().top < fold; });
+    var onScroll = blocks.filter(function (b) { return onLoad.indexOf(b) === -1; });
+    onLoad.forEach(function (b, i) { b.style.transitionDelay = (i * 110) + 'ms'; });
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        onLoad.forEach(function (b) { b.classList.add('is-visible'); });
+      });
+    });
+    if (onScroll.length) {
+      var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          e.target.classList.add('is-visible');
+          obs.unobserve(e.target);
+        });
+      }, { rootMargin: '0px 0px -10% 0px', threshold: 0 });
+      onScroll.forEach(function (b) { obs.observe(b); });
+    }
+  })();
+</script>
+</body>
+</html>

@@ -87,5 +87,3 @@ just compose-down
 
 Everything (database, ceremony, keystores) lives in docker volumes and is
 removed. Next `compose-up` runs a fresh ceremony.
-
-> v0: dealer-trusted setup. do not protect real value with this.

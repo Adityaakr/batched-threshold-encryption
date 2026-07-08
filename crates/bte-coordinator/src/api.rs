@@ -645,7 +645,6 @@ struct CommitteeDetail {
     params_b64: String,
     params_digest: String,
     created_at: i64,
-    trust_model: &'static str,
 }
 
 async fn get_committee(
@@ -670,7 +669,6 @@ async fn get_committee(
                 params_b64: B64.encode(r.get::<_, Vec<u8>>(4)?),
                 params_digest: r.get(0)?,
                 created_at: r.get(5)?,
-                trust_model: "v0: dealer-trusted setup. do not protect real value with this.",
             })
         },
     )

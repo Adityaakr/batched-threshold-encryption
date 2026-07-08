@@ -94,7 +94,4 @@ curl https://<web domain>/v0/committees        # your committee digest
 Then open the domain, seal something in the playground, and watch the five
 share dots fill.
 
-> v0 posture applies in the cloud too: dealer-trusted setup, everything sealed
-> becomes public on cue, do not protect real value.
-
 (config verified against a green build on 2026-07-07)

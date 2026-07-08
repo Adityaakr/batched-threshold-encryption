@@ -121,7 +121,6 @@ async function loadCommittee(committeeEl: HTMLElement): Promise<void> {
         </dd></div>
       </dl>
       <div class="roster">${roster}</div>
-      <p class="trust-note">${esc(c.trust_model)}</p>
     `;
     import('../playground').then(({ wireCopy }) => wireCopy(committeeEl));
   } catch (e) {

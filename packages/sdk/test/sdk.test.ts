@@ -74,7 +74,6 @@ function mockCoordinator() {
         b: 4,
         params_b64: bytesToB64(paramsBytes),
         params_digest: await digest,
-        trust_model: 'v0: dealer-trusted setup. do not protect real value with this.',
       });
     }
     if (url.endsWith('/v0/conditions') && init?.method === 'POST') {

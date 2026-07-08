@@ -1,15 +1,14 @@
 # devnet runbook
 
 How to stand up and operate a public bte devnet. Trust model v0 throughout:
-dealer-trusted setup, testnet toy, no real value.
+dealer-trusted setup.
 
 ## 0. posture
 
 Public banner text (explorer carries it; put it on anything user-facing):
 
 > everything sealed here becomes public when its condition fires, and the
-> whole devnet is wiped weekly. v0 uses a dealer-trusted setup. do not protect
-> real value with this.
+> whole devnet is wiped weekly.
 
 ## 1. ceremony (offline machine)
 

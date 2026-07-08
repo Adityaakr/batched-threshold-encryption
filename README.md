@@ -25,8 +25,6 @@ That is the whole integration. Your users never send a reveal transaction,
 so there is no "the winner never opened their commitment", no reveal
 deadline griefing, no trusted auctioneer sitting on plaintexts.
 
-> **v0: dealer-trusted setup. do not protect real value with this.**
-
 ## how it works
 
 ![bte architecture](docs/img/architecture.svg)

@@ -1,7 +1,6 @@
 // bte-sdk: seal now. reveal on cue.
 //
 // v0 trust model: the committee comes from a dealer-trusted ceremony.
-// Do not protect real value with this.
 
 import { bytesToB64, b64ToBytes, ensureWasm } from './wasm.js';
 import type { Params } from './generated/seal/bte_wasm.js';
@@ -22,7 +21,6 @@ export interface CommitteeInfo {
   t: number;
   b: number;
   digest: string;
-  trustModel: string;
 }
 
 export interface ConditionStatus {
@@ -141,7 +139,6 @@ export class BteClient {
             t: info.t,
             b: info.b,
             digest: info.digest,
-            trustModel: body.trust_model,
           },
         };
       })();

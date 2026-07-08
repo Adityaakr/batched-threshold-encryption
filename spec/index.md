@@ -12,10 +12,9 @@ freezes, each operator posts ONE 48-byte share for the whole batch, any t
 verified shares recover ALL plaintexts, and everyone can read them. Before the
 cue nobody — operators included — can read anything.
 
-Trust model v0, stated loudly everywhere: single trusted dealer ceremony
+Trust model v0: single trusted dealer ceremony
 generates tau, Shamir-deals shares of each power tau^i, publishes public params,
-destroys tau. No DKG. "v0: dealer-trusted setup. do not protect real value with
-this."
+destroys tau. No DKG.
 
 ## 2. Components
 

@@ -19,6 +19,4 @@ console.log(reveal.slots.filter(s => !s.isDummy).map(s => s.text));
 Sealing runs client-side in wasm (inlined, zero bundler config in vite, next,
 and node). Client-side share verification ships separately as `bte-sdk/verify`.
 
-> v0: dealer-trusted setup. do not protect real value with this.
-
 Apache-2.0. Built on commonwarexyz/simple-bte (eprint 2026/760).

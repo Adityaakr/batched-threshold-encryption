@@ -1,6 +1,6 @@
-# Peal - add fair reveals to your dapp in minutes
+# Peal - The programmable disclosure network.
 
-### Peal — the programmable disclosure network.
+### Peal Network
 
  (peal.network)
 

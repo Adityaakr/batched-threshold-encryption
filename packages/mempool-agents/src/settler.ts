@@ -35,7 +35,11 @@ interface Reveal {
   slots: RevealSlot[];
 }
 
-const settled = new Set<string>();
+// `done` covers both successfully settled and permanently skipped conditions.
+// Conditions already revealed when the settler boots are pre-existing (possibly
+// from an older payload format) and are marked done up front, so the settler
+// only ever opens batches sealed after it started.
+const done = new Set<string>();
 
 function b64ToHex(b64: string): `0x${string}` {
   return toHex(Uint8Array.from(Buffer.from(b64, 'base64')));
@@ -47,15 +51,12 @@ function cond32(id: string): `0x${string}` {
 }
 
 async function settle(id: string): Promise<void> {
-  if (settled.has(id)) return;
-  settled.add(id); // optimistic: don't double-submit while the tx is in flight
-
   const key = cond32(id);
   const already = (await pub.readContract({
     address: d.pealMempool, abi: pealMempoolAbi, functionName: 'settledRoot', args: [key],
   })) as `0x${string}`;
   if (already !== `0x${'0'.repeat(64)}`) {
-    console.log(`[settler] ${id.slice(0, 10)} already settled on-chain`);
+    done.add(id);
     return;
   }
 
@@ -68,23 +69,36 @@ async function settle(id: string): Promise<void> {
   const real = slots.filter((s) => s.isReal).length;
   console.log(`[settler] opening ${id.slice(0, 10)} on-chain: ${slots.length} slots, ${real} real`);
 
-  const hash = await wallet.writeContract({
-    address: d.pealMempool, abi: pealMempoolAbi, functionName: 'executeBatch',
-    args: [key, slots, root], chain: chainFor(d),
-  });
-  const rcpt = await pub.waitForTransactionReceipt({ hash });
-  console.log(`[settler] SETTLED ${id.slice(0, 10)} in ${hash} (block ${rcpt.blockNumber})`);
+  try {
+    const hash = await wallet.writeContract({
+      address: d.pealMempool, abi: pealMempoolAbi, functionName: 'executeBatch',
+      args: [key, slots, root], chain: chainFor(d),
+    });
+    const rcpt = await pub.waitForTransactionReceipt({ hash });
+    done.add(id);
+    console.log(`[settler] SETTLED ${id.slice(0, 10)} in ${hash} (block ${rcpt.blockNumber})`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/revert/i.test(msg)) {
+      // A revert means the batch cannot settle against these contracts (e.g. a
+      // payload that is not an order, or a trader without balance/approval).
+      // Permanently skip it rather than retry forever.
+      done.add(id);
+      console.warn(`[settler] skipping ${id.slice(0, 10)}: executeBatch reverted (${msg.split('\n')[0]})`);
+      return;
+    }
+    throw e; // transient (RPC/network): let poll retry
+  }
 }
 
 async function poll(): Promise<void> {
   try {
     const body = (await (await fetch(`${COORD}/v0/conditions`)).json()) as { conditions: ConditionSummary[] };
     for (const c of body.conditions) {
-      if (c.tag === TAG && c.status === 'revealed' && !settled.has(c.id)) {
-        await settle(c.id).catch((e) => {
-          settled.delete(c.id); // let a transient failure retry next tick
-          console.error(`[settler] failed ${c.id.slice(0, 10)}:`, e instanceof Error ? e.message : e);
-        });
+      if (c.tag === TAG && c.status === 'revealed' && !done.has(c.id)) {
+        await settle(c.id).catch((e) =>
+          console.error(`[settler] transient on ${c.id.slice(0, 10)}:`, e instanceof Error ? e.message : e),
+        );
       }
     }
   } catch (e) {
@@ -92,9 +106,27 @@ async function poll(): Promise<void> {
   }
 }
 
+/** Mark everything already revealed as handled, so only batches sealed after
+ * boot get settled (older reveals may predate this payload format). */
+async function snapshot(): Promise<void> {
+  try {
+    const body = (await (await fetch(`${COORD}/v0/conditions`)).json()) as { conditions: ConditionSummary[] };
+    let n = 0;
+    for (const c of body.conditions) {
+      if (c.tag === TAG && c.status === 'revealed') {
+        done.add(c.id);
+        n++;
+      }
+    }
+    if (n) console.log(`[settler] ignoring ${n} pre-existing revealed condition(s)`);
+  } catch (e) {
+    console.error('[settler] snapshot failed:', e instanceof Error ? e.message : e);
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`[settler] ${wallet.account.address} settling ${TAG} reveals from ${COORD} -> ${d.pealMempool}`);
-  await poll();
+  await snapshot();
   setInterval(() => void poll(), POLL_MS);
 }
 

@@ -44,11 +44,13 @@ async function ensureApproval(token: Address, spender: Address): Promise<void> {
 }
 
 async function reserves(pool: Address): Promise<{ base: string; quote: string }> {
+  // Raw wei strings: the browser needs contract-precision reserves to size
+  // amountIn/minOut so its quote matches what the pool will actually give.
   const [base, quote] = await Promise.all([
     pub.readContract({ address: pool, abi: swapPoolAbi, functionName: 'reserveBase' }),
     pub.readContract({ address: pool, abi: swapPoolAbi, functionName: 'reserveQuote' }),
   ]);
-  return { base: formatEther(base), quote: formatEther(quote) };
+  return { base: base.toString(), quote: quote.toString() };
 }
 
 // ---- handlers -----------------------------------------------------------

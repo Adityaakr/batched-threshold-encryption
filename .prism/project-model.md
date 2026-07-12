@@ -563,6 +563,17 @@ New deploy addresses in deployments/42431.json.
 Visual: committee operator dots -> rounded nodes with a blue key-share glyph +
 shadow, green + check when they return a share; flow cards got a base shadow.
 
+### Pool depth tuning for small swaps (2026-07-13)
+User: small swaps ($5-10k) showed "too small to sandwich". Sandwich threshold ~
+0.003 * input-side-reserve, so a deep pool only sandwiches whale trades. Since
+/prepare resets both pools to a target every swap, pool depth is a free dial (no
+drift cost). Set relayer TARGET_BASE/QUOTE to a $1.8M pool (900k USDC / 300 ETH,
+$3000/ETH) -> threshold ~$5k. Default swap lowered to $10k USDC / 3 ETH.
+Verified: $5k ($25 taken), $10k ($50), 8 ETH ($117) all sandwich, peal>=public.
+To change the threshold later, just change TARGET_BASE/QUOTE in relayer.ts and
+restart (no redeploy). NB test /public-swap with a real minOut (fair*(1-slip)),
+not minOut=1, or the searcher front-runs the whole pool.
+
 ### Tempo-under-load learnings (robustness)
 Rapid concurrent test swaps wedged agent nonces (a stalled tx blocks everything
 behind it; symptom: relayer /commit hangs forever). Fixes applied: TX_GAS

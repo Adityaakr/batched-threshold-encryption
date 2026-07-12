@@ -1,9 +1,9 @@
-// The encrypted-mempool landing page. Ported from the Peal design system's
-// mempool-landing UI kit to vanilla TS: the split-mempool hero (public glass
-// waiting room vs sealed batch, sandwich then bloom loop), the footnoted problem
-// stats, the six-step pipeline, the batched-vs-others table, the capsule anatomy
-// with the committee ring, the integration snippet, honest limits, roadmap
-// status, and the CTA band. Chain-level mempool is labelled "in build".
+// The encrypted-mempool landing page. A faithful vanilla-TS port of the Peal
+// design system's "Mempool Landing v2" UI kit: the split-mempool hero (public
+// glass waiting room vs sealed batch, sandwich then bloom loop), the footnoted
+// problem stats, the public-mempool attack story (3 steps), the peal privacy
+// story (4 steps, real on-chain artifacts), the batched-vs-others comparison
+// with the O(n) diagram, and the closing CTA band.
 import { mountScrollReveal } from '../reveal';
 
 const reduced = () =>
@@ -23,9 +23,94 @@ function reticle(): string {
   </span>`;
 }
 
-function cueTag(text: string): string {
-  return `<span class="ml-cue"><span class="ml-cue-mark" aria-hidden="true">&#x2B21;</span>${text}</span>`;
+// A static red crosshair for the exposed order card in the public story.
+function miniReticle(): string {
+  return `<span class="ml-mini-reticle" aria-hidden="true">
+    <svg viewBox="0 0 26 26" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6">
+      <circle cx="13" cy="13" r="8"/><path d="M13 1v5M13 20v5M1 13h5M20 13h5"/>
+      <circle cx="13" cy="13" r="1.6" fill="currentColor" stroke="none"/>
+    </svg>
+  </span>`;
 }
+
+function cueTag(text: string): string {
+  return `<span class="ml-cue"><span class="ml-cue-mark" aria-hidden="true">&#x26D3;</span>${text}</span>`;
+}
+
+// Copyable hash: mono over a dashed underline; flips green briefly on copy.
+function truncMiddle(s: string, head: number, tail: number): string {
+  if (!s || s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
+function hashCopy(value: string, head = 12, tail = 10): string {
+  return `<button type="button" class="ml-hash" data-copy="${value}" title="copy">${truncMiddle(value, head, tail)}</button>`;
+}
+
+function operatorDots(total: number, done: number, label: string): string {
+  let dots = '';
+  for (let i = 0; i < total; i++) {
+    dots += `<span class="ml-opdot${i < done ? ' ml-opdot-on' : ''}"></span>`;
+  }
+  return `<span class="ml-opdots">${dots}<span class="ml-opdots-label">${label}</span></span>`;
+}
+
+// n operator dots in a ring; lit dots are landed shares; a green check appears
+// in the center once the threshold t is met, otherwise a lit/t counter.
+function committeeRing(n: number, t: number, lit: number): string {
+  const size = 120;
+  const r = size / 2 - 10;
+  const cx = size / 2;
+  const cy = size / 2;
+  const met = lit >= t;
+  let dots = '';
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + r * Math.cos(a);
+    const y = cy + r * Math.sin(a);
+    const on = i < lit;
+    dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${on ? 'var(--accent)' : '#fff'}" stroke="${on ? 'var(--accent)' : 'var(--border)'}" stroke-width="1.5"/>`;
+  }
+  const center = met
+    ? `<g><circle cx="${cx}" cy="${cy}" r="16" fill="var(--green-weak)" stroke="var(--green)" stroke-width="1.5"/><path d="M ${cx - 6} ${cy} l 4.5 4.5 l 8 -9" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>`
+    : `<text x="${cx}" y="${cy + 4}" text-anchor="middle" class="ml-cring-count">${lit}/${t}</text>`;
+  return `<svg class="ml-cring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--accent-border)" stroke-width="1" stroke-dasharray="2 4"/>
+    ${dots}${center}
+  </svg>`;
+}
+
+// O(n) vs O(n·B): an n×B spray on the left, one pellet per operator on the right.
+function onDiagram(n = 5, b = 8, width = 420): string {
+  const half = width / 2 - 10;
+  const rowH = 22;
+  const pad = 8;
+  const h = n * rowH + pad * 2 + 34;
+  let left = '';
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < b; j++) {
+      const cx = 30 + j * ((half - 60) / (b - 1));
+      const cy = pad + 28 + i * rowH;
+      left += `<circle cx="${cx.toFixed(1)}" cy="${cy}" r="2.2" fill="var(--muted-soft)"/>`;
+    }
+  }
+  let right = '';
+  for (let i = 0; i < n; i++) {
+    const cy = pad + 28 + i * rowH;
+    right += `<circle cx="${half + 40}" cy="${cy}" r="3" fill="var(--accent)"/>`;
+    right += `<line x1="${half + 46}" y1="${cy}" x2="${width - 70}" y2="${h / 2 + 8}" stroke="var(--accent-border)" stroke-width="1"/>`;
+  }
+  return `<svg class="ml-ondiag" width="${width}" height="${h}" viewBox="0 0 ${width} ${h}">
+    <text x="${half / 2}" y="14" text-anchor="middle" class="ml-ondiag-cap ml-ondiag-muted">per-tx · O(n·B)</text>
+    ${left}
+    <text x="${half + 20 + half / 2}" y="14" text-anchor="middle" class="ml-ondiag-cap ml-ondiag-accent">batched · O(n)</text>
+    ${right}
+    <rect x="${width - 66}" y="${h / 2 - 8}" width="52" height="32" rx="8" fill="var(--accent-weak)" stroke="var(--accent-border)"/>
+    <text x="${width - 40}" y="${h / 2 + 12}" text-anchor="middle" class="ml-ondiag-cap ml-ondiag-accent">batch</text>
+    <line x1="${half + 10}" y1="8" x2="${half + 10}" y2="${h - 8}" stroke="var(--border)" stroke-width="1"/>
+  </svg>`;
+}
+
+// ---- hero stage cards --------------------------------------------------
 
 const PUBLIC_TXS = [
   { from: '0x8a…f3', to: 'Uniswap', what: 'swap 12.4 ETH → USDC', meta: 'slippage 0.5% · gas 34 gwei' },
@@ -75,37 +160,65 @@ function sealedCard(s: (typeof SEALED)[number]): string {
   </div>`;
 }
 
-function committeeRing(n: number, t: number, lit: number): string {
-  const cx = 75;
-  const cy = 75;
-  const r = 56;
-  let dots = '';
-  for (let i = 0; i < n; i++) {
-    const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
-    const x = cx + r * Math.cos(a);
-    const y = cy + r * Math.sin(a);
-    const cls = i < lit ? 'ml-op-lit' : '';
-    dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" class="ml-op ${cls}"/>`;
-  }
-  return `<div class="ml-ring">
-    <svg viewBox="0 0 150 150" width="150" height="150">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="1"/>
-      ${dots}
-      <circle cx="${cx}" cy="${cy}" r="20" class="ml-ring-core"/>
-    </svg>
-    <div class="ml-ring-cap"><b>${t} of ${n}</b> open it</div>
+// ---- story step cards --------------------------------------------------
+
+type Row = { label: string; value: string; tone?: 'bad' | 'good' | 'link' };
+type Step = {
+  n: string;
+  danger?: boolean;
+  title: string;
+  chip: string;
+  chipTone?: 'red' | 'blue' | 'green';
+  body: string;
+  rows: Row[];
+  visual: string;
+};
+
+function ledgerRow(r: Row): string {
+  const tone = r.tone ? ` ml-lrow-${r.tone}` : '';
+  return `<div class="ml-lrow"><span class="ml-lrow-label">${r.label}</span><span class="ml-lrow-value${tone}">${r.value}</span></div>`;
+}
+
+function stepCard(s: Step): string {
+  const tone = s.chipTone || (s.danger ? 'red' : 'blue');
+  return `<div class="ml-scard">
+    <span class="ml-scard-num${s.danger ? ' ml-scard-num-danger' : ''}">${s.n}</span>
+    <div class="ml-scard-body${s.danger ? ' ml-scard-body-danger' : ''}">
+      <div class="ml-scard-visual">${s.visual}</div>
+      <div class="ml-scard-main">
+        <div class="ml-scard-head"><h3 class="ml-scard-title">${s.title}</h3><span class="ml-scard-chip ml-chip-${tone}">${s.chip}</span></div>
+        <p class="ml-scard-copy">${s.body}</p>
+        <div class="ml-ledger">${s.rows.map(ledgerRow).join('')}</div>
+      </div>
+    </div>
   </div>`;
 }
 
-function onDiagram(): string {
-  return `<div class="ml-on">
-    <div class="ml-on-ops">
-      ${Array.from({ length: 5 }, (_, i) => `<span class="ml-on-op" style="--i:${i}"><span class="mono">op ${i + 1}</span><span class="ml-on-val">48b</span></span>`).join('')}
-    </div>
-    <div class="ml-on-arrow" aria-hidden="true"></div>
-    <div class="ml-on-batch"><span class="mono">batch</span><b>B = 64</b><span class="ml-muted">opens at once</span></div>
-    <p class="ml-on-cap">one 48-byte value per operator, whatever the batch size. <b>O(n)</b>, not O(n·B).</p>
+// -- story visuals --
+
+function orderCard(): string {
+  return `<div class="ml-order-card">25,000 USDC <span class="ml-order-arrow">→</span> ETH<span class="ml-order-reticle">${miniReticle()}</span></div>`;
+}
+
+function sandwichStack(closed = false): string {
+  const last = closed
+    ? `<div class="ml-sand-bar ml-sand-red">searcher sells</div>`
+    : `<div class="ml-sand-bar ml-sand-next">next in line…</div>`;
+  return `<div class="ml-sand">
+    <div class="ml-sand-bar ml-sand-red">searcher buys</div>
+    <div class="ml-sand-bar ml-sand-blue">your swap</div>
+    ${last}
   </div>`;
+}
+
+function slotGrid(): string {
+  let cells = '';
+  for (let i = 0; i < 64; i++) cells += `<span class="ml-scell${i === 27 ? ' ml-scell-hot' : ''}"></span>`;
+  return `<div class="ml-slotgrid">${cells}</div>`;
+}
+
+function capsulePill(header: string): string {
+  return `<div class="ml-cap-pill"><span class="ml-cap-hex mono">&#x2B21; <b>${header}</b></span></div>`;
 }
 
 // ---- the page ----------------------------------------------------------
@@ -114,10 +227,102 @@ export function renderMempoolLanding(root: HTMLElement): () => void {
   const previousTitle = document.title;
   document.title = 'Peal Network. the mempool goes dark';
 
+  const publicSteps: Step[] = [
+    {
+      n: '1',
+      danger: true,
+      title: 'your order is public',
+      chip: 'exposed',
+      visual: orderCard(),
+      body: 'on a normal chain your swap waits in the public mempool in plain sight. anyone watching, including automated searchers, can read the amount, the direction, and the price you are willing to accept, all before it executes.',
+      rows: [
+        { label: 'you swap', value: '25,000 USDC to ETH' },
+        { label: 'you accept as low as', value: '8.1316 ETH' },
+        { label: 'the searcher sees', value: 'all of it', tone: 'bad' },
+      ],
+    },
+    {
+      n: '2',
+      danger: true,
+      title: 'the searcher jumps ahead',
+      chip: 'front-run',
+      visual: sandwichStack(false),
+      body: 'seeing your trade coming, the searcher places its own buy just ahead of yours. that pushes the pool price up, so your swap is now lined up to fill at a worse rate than you were quoted.',
+      rows: [
+        { label: 'front-run', value: 'placed just ahead of your swap' },
+        { label: 'effect', value: 'price pushed against you', tone: 'bad' },
+      ],
+    },
+    {
+      n: '3',
+      danger: true,
+      title: 'you fill worse, it takes the spread',
+      chip: 'sandwiched',
+      visual: sandwichStack(true),
+      body: "your swap executes at the price the searcher left behind, and the searcher immediately sells back into it. you receive less than your quote, and that difference, sized to your own slippage limit, becomes the searcher's profit.",
+      rows: [
+        { label: 'you received', value: '8.1316 ETH', tone: 'bad' },
+        { label: 'you were quoted', value: '8.1725 ETH' },
+        { label: 'the searcher took', value: '$103.78', tone: 'bad' },
+        { label: 'on-chain', value: hashCopy('0x0c61cc8e21f4b7d3a95012ef88544c', 8, 4) },
+      ],
+    },
+  ];
+
+  const pealSteps: Step[] = [
+    {
+      n: '1',
+      title: 'encrypted on your device',
+      chip: 'private',
+      visual: capsulePill('b8fe…fa'),
+      body: "your order is encrypted on your own device before it reaches the network. the amount, the direction, and the token stay sealed inside a ciphertext addressed to the committee's key. no relayer, no node, and no operator ever sees it in the clear.",
+      rows: [
+        { label: 'ciphertext', value: hashCopy('b8fe056f19a3d27c4e8b913e4224fa', 8, 8) },
+        { label: 'the searcher sees', value: 'nothing readable', tone: 'bad' },
+      ],
+    },
+    {
+      n: '2',
+      title: 'hidden inside a batch',
+      chip: 'unlinkable',
+      visual: slotGrid(),
+      body: 'the ciphertext drops into a fixed batch of 64 slots. the other slots are indistinguishable decoys, so no observer can tell how many real orders are inside, or which slot is yours. your size, your timing, and your intent disappear into the crowd.',
+      rows: [
+        { label: 'this batch', value: '1 real + 63 decoys = 64 slots' },
+        { label: 'your slot', value: 'indistinguishable from the rest' },
+      ],
+    },
+    {
+      n: '3',
+      title: 'sealed to a distributed committee',
+      chip: 't-of-n',
+      visual: committeeRing(5, 3, 2),
+      body: 'the power to open your batch is split across a committee of independent operators. any 3 of the 5 can open it together, and only once the cue fires. no single operator, and no group smaller than the quorum, can read your order early.',
+      rows: [
+        { label: 'committee', value: operatorDots(5, 3, 'any 3 of 5') },
+        { label: 'params digest', value: hashCopy('1aab2c4871f09de3b52d6c797954', 8, 6) },
+        { label: 'committed', value: hashCopy('0xecb511f534b2491c180d95a11f4b2b0fdc1d42ae07', 7, 4) },
+      ],
+    },
+    {
+      n: '4',
+      title: 'revealed and proven on-chain',
+      chip: 'verifiable',
+      chipTone: 'green',
+      visual: committeeRing(5, 3, 5),
+      body: "at the cue, a quorum of operators each return one 48-byte share. together they open the whole batch at once, after the ordering is already fixed, so there is nothing left to front-run. every share is checked with a public pairing equation, and the settlement contract re-derives the batch's merkle root and rejects any mismatch.",
+      rows: [
+        { label: 'shares', value: '5 of 5 verified', tone: 'good' },
+        { label: 'batch opened', value: '1 real order, together' },
+        { label: 'merkle root', value: hashCopy('e2f200c2b8d4517a90ce36242396', 8, 6) },
+        { label: 'settled', value: hashCopy('0x92b5b5f1c3ad07e64b8812926a', 8, 4) },
+      ],
+    },
+  ];
+
   root.innerHTML = `
     <div class="ml">
       <section class="ml-hero" id="ml-stage">
-        <p class="ml-kicker scroll-reveal">encrypted mempool · in build</p>
         <h1 class="ml-h1 scroll-reveal">the mempool goes dark.</h1>
         <p class="ml-sub scroll-reveal">transactions travel as 48-byte sealed capsules. builders order what they
         cannot read. when the block is final, the whole batch opens at once, and the sandwich never had anything to see.</p>
@@ -167,28 +372,19 @@ export function renderMempoolLanding(root: HTMLElement): () => void {
       </section>
 
       <section class="ml-section">
-        <div class="ml-wrap scroll-reveal">
-          <p class="ml-sec-kicker">how it works</p>
-          <h2 class="ml-h2">six steps, one moment of disclosure</h2>
-          <div class="ml-steps">
-            ${[
-              ['01', 'sign', 'the user signs the tx in their wallet.'],
-              ['02', 'seal', 'encrypted to the committee: 48-byte header plus opaque payload. one call.'],
-              ['03', 'order, blind', 'builders order ciphertexts they cannot read.'],
-              ['04', 'finalize', 'block inclusion is the cue. position is irrevocable.'],
-              ['05', 'open', 'one tiny value per operator; the whole batch decrypts at once.'],
-              ['06', 'execute', 'in the already-fixed order. nothing to front-run ever existed.'],
-            ]
-              .map(
-                ([n, t, d], i) =>
-                  `<div class="ml-step${i >= 1 && i <= 3 ? ' ml-step-hot' : ''}"><div class="mono ml-step-n">${n}</div><div class="ml-step-t">${t}</div><div class="ml-step-d">${d}</div></div>`,
-              )
-              .join('')}
-          </div>
-          <div class="ml-brackets">
-            <div class="ml-bracket ml-bracket-hot">opaque to builders and searchers (02 to 04)</div>
-            <div class="ml-bracket">ordering already irrevocable (05 to 06)</div>
-          </div>
+        <div class="ml-storywrap scroll-reveal">
+          <h2 class="ml-story-h2">how the public mempool takes your money</h2>
+          <p class="ml-story-sub">the same swap in a normal, readable mempool. three moves, and the searcher wins.</p>
+          <div class="ml-story-grid">${publicSteps.map(stepCard).join('')}</div>
+        </div>
+      </section>
+
+      <section class="ml-section">
+        <div class="ml-storywrap scroll-reveal">
+          <h2 class="ml-story-h2">how peal keeps your order private</h2>
+          <p class="ml-story-sub">four steps, and every value below is a real artifact from your swap, verifiable on-chain.</p>
+          <div class="ml-story-grid">${pealSteps.map(stepCard).join('')}</div>
+          <div class="ml-story-cta"><a class="ml-btn ml-btn-soft" href="#/encrypted-mempool">verify the full batch, every slot, share and timing →</a></div>
         </div>
       </section>
 
@@ -208,66 +404,12 @@ export function renderMempoolLanding(root: HTMLElement): () => void {
             </table>
           </div>
           <div class="ml-why-bottom">
-            ${onDiagram()}
+            ${onDiagram(5, 8, 420)}
             <blockquote class="ml-quote">
               <p>"batched threshold encryption addresses the drawbacks of both per-epoch and per-transaction schemes."</p>
               <cite>the team behind today's only live threshold mempool</cite>
             </blockquote>
           </div>
-        </div>
-      </section>
-
-      <section class="ml-section">
-        <div class="ml-wrap scroll-reveal">
-          <p class="ml-sec-kicker">the capsule, up close</p>
-          <h2 class="ml-h2">what a sealed transaction shows the world</h2>
-          <div class="ml-anatomy">
-            <div class="ml-anatomy-left">
-              ${sealedCard(SEALED[0])}
-              <div class="ml-anatomy-rows">
-                <span class="ml-anatomy-key ml-anatomy-key-accent">48-byte header</span><span>one G1 point (BLS12-381). the only cryptographic overhead, shown as short hex.</span>
-                <span class="ml-anatomy-key">opaque payload</span><span>the transaction itself. unreadable below the committee threshold.</span>
-                <span class="ml-anatomy-key">cue tag</span><span>what opens it. for the mempool: inclusion itself.</span>
-                <span class="ml-anatomy-key">pairing check</span><span>every operator's share verified in public, one equation. that's the ✓.</span>
-              </div>
-            </div>
-            ${committeeRing(16, 11, 12)}
-          </div>
-          <p class="ml-note">visible before the reveal: ciphertext size, gas limit, sender. hidden: everything the sandwich needs.</p>
-        </div>
-      </section>
-
-      <section class="ml-section" id="ml-integration">
-        <div class="ml-wrap scroll-reveal">
-          <p class="ml-sec-kicker">integration</p>
-          <h2 class="ml-h2">two lines in front of any signer</h2>
-          <div class="ml-code-wrap">
-            <span class="ml-code-tab">ts</span>
-            <pre class="ml-code"><code><span class="ml-k">const</span> raw = <span class="ml-k">await</span> wallet.signTransaction(tx);
-<span class="ml-k">await</span> peal.seal(raw, cues.atInclusion(<span class="ml-s">"ethereum"</span>), { lane: <span class="ml-s">"mempool"</span> });</code></pre>
-          </div>
-          <p class="ml-note">wallets · RPCs · rollup sequencers · LUCID key-provider ready</p>
-        </div>
-      </section>
-
-      <section class="ml-section">
-        <div class="ml-wrap ml-narrow scroll-reveal">
-          <p class="ml-sec-kicker">honest limits</p>
-          <h2 class="ml-h2">what this does, and what it doesn't</h2>
-          <p class="ml-p"><strong>what this does:</strong> removes mempool-stage MEV, front-running, sandwiching, and real-time censorship, by removing the visibility they require.</p>
-          <p class="ml-p"><strong>what it doesn't:</strong> metadata (size, gas, sender) stays visible before the reveal; post-reveal, state-based strategies are out of scope. guarantees hold under an honest-threshold committee, which is exactly what staking and slashing exist to price.</p>
-        </div>
-      </section>
-
-      <section class="ml-section">
-        <div class="ml-wrap scroll-reveal">
-          <p class="ml-sec-kicker">status</p>
-          <div class="ml-status-chips">
-            <span class="ml-chip ml-chip-live">live: playground + app-level sealed lanes</span>
-            <span class="ml-chip ml-chip-build">in build: chain-level encrypted mempool</span>
-          </div>
-          <p class="ml-p ml-narrow">live today: the peal playground and app-level sealed lanes. this page: the chain-level integration we're building on the same engine. the current stage is always stated at peal.network.</p>
-          <p class="ml-note">ethereum · L2s · LUCID-ready</p>
         </div>
       </section>
 
@@ -303,10 +445,31 @@ export function renderMempoolLanding(root: HTMLElement): () => void {
     }, 1100);
   }
 
+  // Copyable hashes: flip the button label to "copied" briefly.
+  const onCopy = (ev: Event) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>('.ml-hash');
+    if (!btn) return;
+    const full = btn.dataset.copy || '';
+    try {
+      navigator.clipboard?.writeText(full);
+    } catch {
+      /* clipboard unavailable */
+    }
+    const prev = btn.textContent;
+    btn.textContent = 'copied';
+    btn.classList.add('is-copied');
+    window.setTimeout(() => {
+      btn.textContent = prev;
+      btn.classList.remove('is-copied');
+    }, 1200);
+  };
+  root.addEventListener('click', onCopy);
+
   const cleanupReveal = mountScrollReveal(root);
 
   return () => {
     if (timer) clearInterval(timer);
+    root.removeEventListener('click', onCopy);
     cleanupReveal();
     document.title = previousTitle;
   };

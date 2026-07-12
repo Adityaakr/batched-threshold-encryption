@@ -1,6 +1,6 @@
 // The encrypted mempool, live on Tempo. A DEX-style swap that, once sent, opens
-// into (1) the outcome side-by-side — sandwiched in a public mempool, untouched
-// in the sealed Peal mempool — and (2) a technical walk-through of how Peal
+// into (1) the outcome side-by-side: sandwiched in a public mempool, untouched
+// in the sealed Peal mempool, and (2) a technical walk-through of how Peal
 // actually did it, populated with the real cryptographic artifacts as they land:
 // the ciphertext hash, the t-of-n committee, the verified operator shares, the
 // merkle root, and the on-chain verification.
@@ -26,13 +26,14 @@ import {
   type MempoolConfig,
 } from '../mempool/chain';
 import {
-  createBatchScene,
-  createRevealScene,
+  createFxBatch,
+  createFxCommit,
+  createFxEncrypt,
+  createFxReveal,
   createSandwichScene,
   createVaultScene,
-  type RevealScene,
+  type Fx,
   type Scene,
-  type StepScene,
 } from '../mempool/visuals';
 import { esc, fmtCountdown, truncMiddle } from '../util';
 
@@ -56,6 +57,29 @@ const usd2 = (n: number) =>
 const num = (s: string | number, dp = 4) =>
   Number(s).toLocaleString(undefined, { maximumFractionDigits: dp });
 
+/** Trust-building copy for the four pipeline steps. No em-dashes (brand rule). */
+const FLOW_COPY = [
+  `Your order is encrypted on your own device before it reaches the network. The amount, the direction, and the token stay sealed inside a ciphertext addressed to the committee's key. No relayer, no node, and no operator ever sees it in the clear.`,
+  `The ciphertext drops into a fixed batch of 64 slots. The other slots are indistinguishable decoys, so no observer can tell how many real orders are inside, or which slot is yours. Your size, your timing, and your intent disappear into the crowd.`,
+  `The power to open your batch is split across a committee of independent operators. Any 3 of the 5 can open it together, and only once the cue fires. No single operator, and no group smaller than the quorum, can read your order early.`,
+  `At the cue, a quorum of operators each return one 48-byte share. Together they open the whole batch at once, after the ordering is already fixed, so there is nothing left to front-run. Every share is checked with a public pairing equation, and the settlement contract re-derives the batch's merkle root and rejects any mismatch.`,
+];
+
+function flowStep(n: number, chip: string, title: string, copy: string): string {
+  return `
+    <li class="mp-flow-step" id="mp-step-${n}">
+      <div class="mp-flow-rail"><span class="mp-flow-dot">${n}</span></div>
+      <div class="mp-flow-card">
+        <div class="mp-flow-viz" id="mp-viz-${n}"></div>
+        <div class="mp-flow-text">
+          <div class="mp-flow-top"><h4>${esc(title)}</h4><span class="mp-lane-chip mp-chip-blue">${esc(chip)}</span></div>
+          <p class="mp-flow-copy">${copy}</p>
+          <div class="mp-flow-data" id="mp-data-${n}"><div class="mp-lane-status"><span class="mp-spinner"></span>waiting…</div></div>
+        </div>
+      </div>
+    </li>`;
+}
+
 export function renderMempool(root: HTMLElement): () => void {
   const previousTitle = document.title;
   document.title = 'Peal Network. encrypted mempool';
@@ -69,10 +93,9 @@ export function renderMempool(root: HTMLElement): () => void {
   const timers: number[] = [];
   let sandwich: Scene | null = null;
   let vault: Scene | null = null;
-  let batchScene: StepScene | null = null;
-  let revealScene: RevealScene | null = null;
+  let fxScenes: Fx[] = [];
   let condId = '';
-  let sealCtHash = '';
+  let commitTx = '';
 
   const payToken = (): Sym => (usdcToEth ? 'USDC' : 'ETH');
   const recvToken = (): Sym => (usdcToEth ? 'ETH' : 'USDC');
@@ -125,7 +148,7 @@ export function renderMempool(root: HTMLElement): () => void {
             </div>
             ${swapField('recv', 'You receive', 'ETH', '')}
             <div class="mp-swap-info">
-              <div class="mp-info-row"><span>Rate</span><span id="mp-rate" class="mono">—</span></div>
+              <div class="mp-info-row"><span>Rate</span><span id="mp-rate" class="mono">·</span></div>
               <div class="mp-info-row">
                 <span>Max slippage</span>
                 <select id="mp-slip" class="mp-slip">
@@ -135,7 +158,7 @@ export function renderMempool(root: HTMLElement): () => void {
                   <option value="0.03">3%</option>
                 </select>
               </div>
-              <div class="mp-info-row"><span>Min received</span><span id="mp-min" class="mono">—</span></div>
+              <div class="mp-info-row"><span>Min received</span><span id="mp-min" class="mono">·</span></div>
             </div>
             <button type="button" class="mp-swap-btn" id="mp-go">Swap</button>
             <p class="mp-swap-foot">you sign nothing. the relayer sponsors the transaction.</p>
@@ -158,24 +181,17 @@ export function renderMempool(root: HTMLElement): () => void {
           </div>
           <div class="mp-diff" id="mp-diff" hidden></div>
 
-          <section class="mp-proofs" id="mp-proofs" hidden>
+          <section class="mp-flow" id="mp-proofs" hidden>
             <div class="mp-proofs-head">
-              <h3>inside the peal mempool</h3>
-              <p>how your swap was sealed and proved, with batched threshold encryption. every
-              value below is a real artifact from your swap, verifiable on-chain — not a mock-up.</p>
+              <h3>how Peal keeps your order private</h3>
+              <p>four steps, and every value below is a real artifact from your swap, verifiable on-chain.</p>
             </div>
-            <div class="mp-lanes mp-process">
-              <article class="mp-lane mp-lane-peal" id="mp-proc-seal">
-                <header class="mp-lane-head"><h2>1. sealed &amp; batched</h2><span class="mp-lane-chip mp-chip-blue">encrypted</span></header>
-                <div class="mp-visual" id="mp-vis-batch"></div>
-                <div class="mp-proc-body" id="mp-body-seal"><div class="mp-lane-status"><span class="mp-spinner"></span>encrypting…</div></div>
-              </article>
-              <article class="mp-lane mp-lane-peal" id="mp-proc-reveal">
-                <header class="mp-lane-head"><h2>2. revealed &amp; proved</h2><span class="mp-lane-chip mp-chip-blue">on-chain</span></header>
-                <div class="mp-visual" id="mp-vis-reveal"></div>
-                <div class="mp-proc-body" id="mp-body-reveal"><div class="mp-lane-status"><span class="mp-spinner"></span>waiting for the cue…</div></div>
-              </article>
-            </div>
+            <ol class="mp-flow-list">
+              ${flowStep(1, 'private', 'encrypted on your device', FLOW_COPY[0])}
+              ${flowStep(2, 'unlinkable', 'hidden inside a batch', FLOW_COPY[1])}
+              ${flowStep(3, 't-of-n', 'sealed to a distributed committee', FLOW_COPY[2])}
+              ${flowStep(4, 'verifiable', 'revealed and proven on-chain', FLOW_COPY[3])}
+            </ol>
           </section>
 
           <button type="button" class="btn" id="mp-again" hidden>swap again</button>
@@ -272,12 +288,10 @@ export function renderMempool(root: HTMLElement): () => void {
     swapWrap.classList.remove('is-out');
     sandwich?.destroy();
     vault?.destroy();
-    batchScene?.destroy();
-    revealScene?.destroy();
+    fxScenes.forEach((fx) => fx.destroy());
     sandwich = null;
     vault = null;
-    batchScene = null;
-    revealScene = null;
+    fxScenes = [];
     busy = false;
     const go = appEl.querySelector<HTMLButtonElement>('#mp-go');
     if (go) {
@@ -319,23 +333,20 @@ export function renderMempool(root: HTMLElement): () => void {
 
     sandwich = createSandwichScene();
     vault = createVaultScene();
-    batchScene = createBatchScene();
-    revealScene = createRevealScene();
     appEl.querySelector<HTMLElement>('#mp-vis-public')!.appendChild(sandwich.el);
     appEl.querySelector<HTMLElement>('#mp-vis-peal')!.appendChild(vault.el);
-    appEl.querySelector<HTMLElement>('#mp-vis-batch')!.appendChild(batchScene.el);
-    appEl.querySelector<HTMLElement>('#mp-vis-reveal')!.appendChild(revealScene.el);
     sandwich.play();
     vault.play();
-    batchScene.play();
-    revealScene.play();
+    // The 4 flow animations loop continuously so the process is always visible.
+    fxScenes = [createFxEncrypt(), createFxBatch(), createFxCommit(), createFxReveal()];
+    fxScenes.forEach((fx, i) => appEl.querySelector<HTMLElement>(`#mp-viz-${i + 1}`)!.appendChild(fx.el));
 
     const publicRes = appEl.querySelector<HTMLElement>('#mp-res-public')!;
     const pealRes = appEl.querySelector<HTMLElement>('#mp-res-peal')!;
     publicRes.innerHTML = laneStatus('the searcher is reading your order in the clear…');
     pealRes.innerHTML = laneStatus(`sealed. cue in ${ROUND_SECS}s. the searcher sees only a hash…`);
 
-    // The committee is known before we even seal — fill step 1's threshold.
+    // The committee is known before we even seal; fill step 1's threshold.
     const committee = await client.committee();
 
     const conditionId = await client.condition({ in: ROUND_SECS, tag: 'mempool' });
@@ -344,13 +355,15 @@ export function renderMempool(root: HTMLElement): () => void {
     const sealed = await client.seal(payload, conditionId);
     if (dead) return;
 
-    // Process card 1: sealed & batched (ciphertext + committee + batch).
-    sealCtHash = sealed.ctHash;
+    // Steps 1-3 are known the moment the order is sealed.
     appEl.querySelector<HTMLElement>('#mp-proofs')!.hidden = false;
-    fillSealBatch(sealed.ctHash, committee, null);
-    batchScene?.seal();
+    fillStep1(sealed.ctHash);
+    fillStep2(committee, null);
+    fillStep3(committee, '');
 
     const commit = await commitSealed(conditionId, sealed.ctHash);
+    commitTx = commit.txHash;
+    fillStep3(committee, commitTx);
     pealRes.innerHTML = laneStatus(
       `committed on-chain as a hash (${link(commit.txHash)}). cue in ~${ROUND_SECS}s…`,
     );
@@ -379,64 +392,74 @@ export function renderMempool(root: HTMLElement): () => void {
     } else {
       diff.innerHTML =
         `<span class="mp-diff-kicker">same swap, two mempools</span>` +
-        `<span class="mp-diff-cap">too small to sandwich here — but the public lane leaks the moment the trade is worth wrapping. the sealed lane never does.</span>`;
+        `<span class="mp-diff-cap">too small to sandwich here, but the public lane leaks the moment the trade is worth wrapping. the sealed lane never does.</span>`;
     }
     appEl.querySelector<HTMLButtonElement>('#mp-again')!.hidden = false;
     busy = false;
   }
 
-  // ---- process cards (real BTE artifacts, uniform with the lanes) -------
+  // ---- the 4 pipeline steps (real BTE artifacts) ------------------------
 
-  /** Card 1: sealed in the browser and batched to the committee. */
-  function fillSealBatch(
-    ctHash: string,
-    committee: { n: number; t: number; b: number; digest: string },
+  function stepData(n: number): HTMLElement {
+    return appEl.querySelector<HTMLElement>(`#mp-data-${n}`)!;
+  }
+  function markDone(n: number): void {
+    appEl.querySelector<HTMLElement>(`#mp-step-${n}`)?.classList.add('is-done');
+  }
+
+  /** Step 1: encrypted on the device. */
+  function fillStep1(ctHash: string): void {
+    stepData(1).innerHTML =
+      proofRow('ciphertext', `<span class="mono">${esc(truncMiddle(ctHash, 8, 8))}</span>`) +
+      proofRow('the searcher sees', `<span class="mp-danger">nothing readable</span>`);
+    markDone(1);
+  }
+
+  /** Step 2: hidden inside a padded batch. */
+  function fillStep2(
+    committee: { b: number },
     batch: { real: number; total: number } | null,
   ): void {
     const batchRow = batch
-      ? proofRow(
-          'this batch',
-          `<b>${batch.real}</b> real + <b>${batch.total - batch.real}</b> decoys = ${batch.total} slots`,
-        )
-      : proofRow('batch', `${committee.b} slots (real orders hidden among decoys)`);
-    const body = appEl.querySelector<HTMLElement>('#mp-body-seal')!;
-    body.innerHTML = `
-      <p class="mp-proc-lead">Encrypted in your browser to the committee's key, then dropped into a
-      batch sealed to a <b>${committee.t}-of-${committee.n}</b> committee. The searcher sees only a
-      hash — no amount, no direction — and even the count of real orders hides behind decoys.</p>
-      ${proofRow('ciphertext', `<span class="mono">${esc(truncMiddle(ctHash, 8, 8))}</span>`)}
-      ${proofRow('committee', `${operatorPips(committee.n, committee.t)} any <b>${committee.t}</b> of <b>${committee.n}</b>`)}
-      ${batchRow}
-      ${proofRow('params digest', `<span class="mono">${esc(truncMiddle(committee.digest, 8, 6))}</span>`)}`;
-    appEl.querySelector<HTMLElement>('#mp-proc-seal')!.classList.add('is-done');
+      ? proofRow('this batch', `<b>${batch.real}</b> real + <b>${batch.total - batch.real}</b> decoys = ${batch.total} slots`)
+      : proofRow('batch', `${committee.b} fixed slots, decoys included`);
+    stepData(2).innerHTML =
+      batchRow + proofRow('your slot', `indistinguishable from the rest`);
+    markDone(2);
   }
 
-  /** Card 2: revealed by t-of-n shares and proved on-chain. */
-  function fillRevealCard(
+  /** Step 3: sealed to a t-of-n committee, committed on-chain. */
+  function fillStep3(
+    committee: { n: number; t: number; digest: string },
+    txHash: string,
+  ): void {
+    stepData(3).innerHTML =
+      proofRow('committee', `${operatorPips(committee.n, committee.t)} any <b>${committee.t}</b> of <b>${committee.n}</b>`) +
+      proofRow('params digest', `<span class="mono">${esc(truncMiddle(committee.digest, 8, 6))}</span>`) +
+      (txHash ? proofRow('committed', `${link(txHash)}`) : proofRow('committed', 'submitting…'));
+    if (txHash) markDone(3);
+  }
+
+  /** Step 4: revealed by a quorum and proven on-chain. */
+  function fillStep4(
     reveal: { merkleRoot: string; shares: Array<{ verified: boolean }>; slots: Array<{ isDummy: boolean }> },
-    committee: { n: number; t: number },
+    committee: { n: number },
     txHash: string,
   ): void {
     const verified = reveal.shares.filter((s) => s.verified).length;
     const real = reveal.slots.filter((s) => !s.isDummy).length;
-    revealScene?.reveal(verified);
     const verifyLink = condId
       ? `<a class="mp-proc-verify" href="#/condition/${encodeURIComponent(condId)}">
-           verify the full batch — every slot, share &amp; timing
+           verify the full batch, every slot, share and timing
            <span class="mp-proc-arrow" aria-hidden="true"></span></a>`
       : '';
-    const body = appEl.querySelector<HTMLElement>('#mp-body-reveal')!;
-    body.innerHTML = `
-      <p class="mp-proc-lead">At the cue each operator posted one 48-byte share; any
-      <b>${committee.t}</b> combine to open the <b>whole batch at once</b>, after the ordering is
-      fixed. Every share is checked with a public pairing equation, and the on-chain
-      <span class="mono">executeBatch</span> re-derives the batch's root and rejects any mismatch.</p>
-      ${proofRow('shares', `${checks(verified, committee.n)} <b>${verified}</b> of ${committee.n} verified`)}
-      ${proofRow('batch opened', `${real} real order${real === 1 ? '' : 's'}, all at once`)}
-      ${proofRow('merkle root', `<span class="mono">${esc(truncMiddle(reveal.merkleRoot, 8, 6))}</span>`)}
-      ${proofRow('settled', `executeBatch ${link(txHash)}`)}
-      ${verifyLink}`;
-    appEl.querySelector<HTMLElement>('#mp-proc-reveal')!.classList.add('is-done');
+    stepData(4).innerHTML =
+      proofRow('shares', `${checks(verified, committee.n)} <b>${verified}</b> of ${committee.n} verified`) +
+      proofRow('batch opened', `${real} real order${real === 1 ? '' : 's'}, together`) +
+      proofRow('merkle root', `<span class="mono">${esc(truncMiddle(reveal.merkleRoot, 8, 6))}</span>`) +
+      proofRow('settled', `executeBatch ${link(txHash)}`) +
+      verifyLink;
+    markDone(4);
   }
 
   // ---- lane polling / rendering -----------------------------------------
@@ -489,7 +512,7 @@ export function renderMempool(root: HTMLElement): () => void {
             tone: 'ok',
             got: r.victimOut ?? '',
             unit: ctx.recvUnit,
-            line: `filled in full — too small to sandwich`,
+            line: `filled in full, too small to sandwich`,
             tx: link(r.txHash ?? ''),
           });
         }
@@ -520,8 +543,8 @@ export function renderMempool(root: HTMLElement): () => void {
           const st = await client.status(conditionId);
           if (st.firesAt) firesAt = st.firesAt;
           // Live batch fill: how many real orders are queued with yours.
-          if (st.ciphertextCount && sealCtHash) {
-            fillSealBatch(sealCtHash, committee, { real: st.realCount, total: committee.b });
+          if (st.ciphertextCount) {
+            fillStep2(committee, { real: st.realCount, total: committee.b });
           }
         } catch {
           /* transient */
@@ -549,7 +572,7 @@ export function renderMempool(root: HTMLElement): () => void {
         // Proof step 3: the real reveal (shares, root, on-chain verification).
         try {
           const reveal = await client.reveal(conditionId);
-          if (reveal) fillRevealCard(reveal, committee, r.txHash ?? '');
+          if (reveal) fillStep4(reveal, committee, r.txHash ?? '');
         } catch {
           /* the lane result already shows the settlement tx */
         }
@@ -575,8 +598,7 @@ export function renderMempool(root: HTMLElement): () => void {
     for (const t of timers) clearInterval(t);
     sandwich?.destroy();
     vault?.destroy();
-    batchScene?.destroy();
-    revealScene?.destroy();
+    fxScenes.forEach((fx) => fx.destroy());
     document.title = previousTitle;
   };
 }
@@ -638,11 +660,11 @@ function faqHtml(cfg: MempoolConfig): string {
     ],
     [
       'How does the searcher take money on the public side?',
-      `It reads your pending swap in the clear, buys ahead of you to push the price up (the front-run), lets your swap fill at the worse price, then sells back (the back-run). It sizes the front-run to push you to exactly your slippage floor and no further — so your tolerance is really the quote you hand the searcher.`,
+      `It reads your pending swap in the clear, buys ahead of you to push the price up (the front-run), lets your swap fill at the worse price, then sells back (the back-run). It sizes the front-run to push you to exactly your slippage floor and no further, so your tolerance is really the quote you hand the searcher.`,
     ],
     [
       'How does the sealing actually work?',
-      `Batched threshold encryption. Your order is encrypted to a committee's public key so only a t-of-n quorum of operators can open it, and only on the cue. Crucially the committee's per-open work is independent of the batch size, so one 48-byte share from each operator opens a whole batch of orders at once. Nothing is readable before the cue — not by the searcher, and not by any single operator.`,
+      `Batched threshold encryption. Your order is encrypted to a committee's public key so only a t-of-n quorum of operators can open it, and only on the cue. Crucially the committee's per-open work is independent of the batch size, so one 48-byte share from each operator opens a whole batch of orders at once. Nothing is readable before the cue, not by the searcher, and not by any single operator.`,
     ],
     [
       'Why can the searcher not do that on the peal side?',

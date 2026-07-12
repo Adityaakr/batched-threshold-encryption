@@ -226,3 +226,110 @@ export function createRevealScene(n = 5, t = 3): RevealScene {
     },
   };
 }
+
+// ---- animated flow scenes (the 4-step "how it works" pipeline) ---------
+// Each loops continuously so the process is always visibly happening. CSS
+// keyframes drive the motion (see style.css, gated on prefers-reduced-motion).
+
+export interface Fx {
+  el: HTMLElement;
+  destroy(): void;
+}
+
+/** Step 1: your order is encrypted in the browser. A card flips from a
+ *  readable order to a locked ciphertext, over and over. */
+export function createFxEncrypt(): Fx {
+  const root = el('fx fx-encrypt');
+  root.innerHTML = `
+    <div class="fx-stage">
+      <div class="fx-card">
+        <div class="fx-face fx-plain">
+          <span class="fx-plain-a">250,000 USDC</span>
+          <span class="fx-plain-arrow"></span>
+          <span class="fx-plain-b">ETH</span>
+        </div>
+        <div class="fx-face fx-cipher">
+          <span class="fx-cipher-lock"></span>
+          <span class="fx-cipher-hex">a3 89 16 d5 …</span>
+        </div>
+      </div>
+      <div class="fx-scan"></div>
+    </div>`;
+  return { el: root, destroy: () => root.remove() };
+}
+
+/** Step 2: the order drops into one slot of a padded batch and becomes
+ *  indistinguishable from 63 decoys. */
+export function createFxBatch(realIndex = 27): Fx {
+  const root = el('fx fx-batch2');
+  const stage = el('fx-stage');
+  const grid = el('fx-grid');
+  for (let i = 0; i < 64; i++) {
+    const cell = el(i === realIndex ? 'fx-cell fx-cell-real' : 'fx-cell');
+    cell.style.setProperty('--i', String(i));
+    cell.style.setProperty('--r', String(Math.floor(i / 8)));
+    if (i === realIndex) cell.innerHTML = '<span class="fx-cell-lock"></span>';
+    grid.appendChild(cell);
+  }
+  stage.appendChild(grid);
+  root.appendChild(stage);
+  return { el: root, destroy: () => root.remove() };
+}
+
+/** Step 3: the sealed order is split across the committee. Key shards fly
+ *  from the core out to each operator; no one holds enough alone. */
+export function createFxCommit(n = 5): Fx {
+  const root = el('fx fx-commit');
+  const stage = el('fx-stage');
+  const core = el('fx-core', '<span class="fx-core-lock"></span>');
+  stage.appendChild(core);
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const x = 50 + 40 * Math.cos(ang);
+    const y = 50 + 40 * Math.sin(ang);
+    const op = el('fx-op');
+    op.style.left = `${x}%`;
+    op.style.top = `${y}%`;
+    op.style.setProperty('--i', String(i));
+    stage.appendChild(op);
+    const shard = el('fx-shard');
+    shard.style.setProperty('--tx', `${x - 50}%`);
+    shard.style.setProperty('--ty', `${y - 50}%`);
+    shard.style.setProperty('--i', String(i));
+    stage.appendChild(shard);
+  }
+  root.appendChild(stage);
+  return { el: root, destroy: () => root.remove() };
+}
+
+/** Step 4: at the cue, a quorum returns shares, the batch opens for everyone
+ *  at once, and the chain verifies the merkle root. */
+export function createFxReveal(n = 5, t = 3): Fx {
+  const root = el('fx fx-reveal2');
+  const stage = el('fx-stage');
+  const core = el('fx-core fx-core-open', '<span class="fx-core-lock"></span><span class="fx-core-check">✓</span>');
+  stage.appendChild(core);
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const x = 50 + 40 * Math.cos(ang);
+    const y = 50 + 40 * Math.sin(ang);
+    const op = el(i < t ? 'fx-op fx-op-on' : 'fx-op');
+    op.style.left = `${x}%`;
+    op.style.top = `${y}%`;
+    op.style.setProperty('--i', String(i));
+    stage.appendChild(op);
+    if (i < t) {
+      const share = el('fx-share');
+      share.style.left = `${x}%`;
+      share.style.top = `${y}%`;
+      share.style.setProperty('--tx', `${50 - x}%`);
+      share.style.setProperty('--ty', `${50 - y}%`);
+      share.style.setProperty('--i', String(i));
+      stage.appendChild(share);
+    }
+  }
+  const anchor = el('fx-anchor', '<span class="fx-anchor-check"></span>on-chain');
+  stage.appendChild(anchor);
+  root.appendChild(stage);
+  return { el: root, destroy: () => root.remove() };
+}

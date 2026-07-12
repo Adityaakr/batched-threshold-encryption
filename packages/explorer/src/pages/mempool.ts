@@ -561,8 +561,11 @@ export function renderMempool(root: HTMLElement): () => void {
 
   // msg is trusted HTML built from developer templates (it may embed a link());
   // callers escape their own dynamic plain-text parts, so do not escape here.
+  // Wrap it in one span so the flex row is just spinner + text: the message then
+  // flows and wraps as normal inline text instead of each run becoming its own
+  // flex item.
   function laneStatus(msg: string): string {
-    return `<div class="mp-lane-status"><span class="mp-spinner" aria-hidden="true"></span>${msg}</div>`;
+    return `<div class="mp-lane-status"><span class="mp-spinner" aria-hidden="true"></span><span class="mp-lane-msg">${msg}</span></div>`;
   }
 
   function link(hash: string): string {

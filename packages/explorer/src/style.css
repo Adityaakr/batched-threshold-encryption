@@ -2706,7 +2706,11 @@ body.landing-page main {
 .mp-visual { position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 
 .mp-lane-result { min-height: 76px; display: flex; flex-direction: column; justify-content: center; border-top: 1px solid var(--border); padding-top: 14px; }
-.mp-lane-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13.5px; }
+.mp-lane-status { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: 13.5px; }
+.mp-lane-msg { flex: 1; min-width: 0; line-height: 1.55; }
+/* keep the truncated hash link on one piece instead of breaking mid-token */
+.mp-lane-status a.link, .mp-lane-msg .mono { white-space: nowrap; }
+.mp-lane-status .mp-spinner { margin-top: 3px; }
 .mp-spinner {
   width: 15px; height: 15px; border-radius: 999px; flex: none;
   border: 2px solid var(--border); border-top-color: var(--accent);

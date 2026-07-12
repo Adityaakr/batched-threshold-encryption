@@ -134,3 +134,95 @@ export function createVaultScene(): Scene {
     },
   };
 }
+
+// ---- peal process, step 1: sealed & batched ---------------------------
+// Your order (blue, locked) sits in a batch of 64 slots. The rest are decoys,
+// so even the number of real orders is hidden. On resolve() the grid "seals".
+
+export interface StepScene {
+  el: HTMLElement;
+  play(): void;
+  seal(): void;
+  destroy(): void;
+}
+
+export function createBatchScene(realIndex = 27): StepScene {
+  const root = el('mp3d mp3d-batch');
+  root.dataset.phase = 'idle';
+  const stage = el('mp3d-stage');
+  const grid = el('batch-grid');
+  for (let i = 0; i < 64; i++) {
+    const cell = el(i === realIndex ? 'batch-cell batch-cell-real' : 'batch-cell');
+    cell.style.setProperty('--i', String(i));
+    if (i === realIndex) cell.innerHTML = '<span class="batch-lock" aria-hidden="true"></span>';
+    grid.appendChild(cell);
+  }
+  stage.appendChild(grid);
+  root.appendChild(stage);
+  return {
+    el: root,
+    play() {
+      root.dataset.phase = 'racing';
+    },
+    seal() {
+      root.dataset.phase = 'sealed';
+    },
+    destroy() {
+      root.remove();
+    },
+  };
+}
+
+// ---- peal process, step 2: revealed & proven --------------------------
+// n operators ring a sealed core. On reveal, t of them light up and fire a
+// share into the core; the core opens and a proof badge lands.
+
+export interface RevealScene {
+  el: HTMLElement;
+  play(): void;
+  /** Light `verified` operators, fire shares, open the core. */
+  reveal(verified: number): void;
+  destroy(): void;
+}
+
+export function createRevealScene(n = 5, t = 3): RevealScene {
+  const root = el('mp3d mp3d-reveal');
+  root.dataset.phase = 'idle';
+  const stage = el('mp3d-stage');
+  const ring = el('reveal-ring');
+
+  const core = el('reveal-core', '<span class="reveal-core-lock" aria-hidden="true"></span><span class="reveal-core-open" aria-hidden="true">✓</span>');
+  ring.appendChild(core);
+
+  const nodes: HTMLElement[] = [];
+  for (let i = 0; i < n; i++) {
+    const ang = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    const x = 50 + 42 * Math.cos(ang);
+    const y = 50 + 42 * Math.sin(ang);
+    const node = el('reveal-node', `<span class="reveal-share" aria-hidden="true"></span>`);
+    node.style.left = `${x}%`;
+    node.style.top = `${y}%`;
+    node.style.setProperty('--tx', `${50 - x}%`);
+    node.style.setProperty('--ty', `${50 - y}%`);
+    node.style.setProperty('--i', String(i));
+    ring.appendChild(node);
+    nodes.push(node);
+  }
+  stage.appendChild(ring);
+  root.appendChild(stage);
+
+  return {
+    el: root,
+    play() {
+      root.dataset.phase = 'racing';
+    },
+    reveal(verified: number) {
+      root.dataset.phase = 'opened';
+      // Light the first `min(verified, t)` operators as the ones that opened it.
+      nodes.forEach((node, i) => node.classList.toggle('is-on', i < Math.min(verified, t)));
+    },
+    destroy() {
+      root.remove();
+    },
+  };
+}

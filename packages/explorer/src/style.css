@@ -2936,3 +2936,90 @@ body.landing-page main {
 @media (prefers-reduced-motion: reduce) {
   .mp-step, .mp-step-n, .mp-step-check { transition: none !important; }
 }
+
+/* ---- peal process cards (uniform with the comparison lanes) ---- */
+.mp-process { margin-top: 4px; }
+.mp-proc-body { border-top: 1px solid var(--border); padding-top: 14px; }
+.mp-proc-lead { font-size: 13px; color: var(--text); line-height: 1.55; margin: 0 0 12px; }
+.mp-proc-lead b { font-weight: 700; }
+.mp-proc-body .mp-proof-row { padding: 7px 0; }
+.mp-proc-verify {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 14px; padding: 11px 14px; border-radius: 10px;
+  background: var(--accent-weak); border: 1px solid var(--accent-border);
+  color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none;
+  transition: background 150ms, border-color 150ms;
+}
+.mp-proc-verify:hover { background: #e0ecfe; border-color: var(--accent); }
+.mp-proc-arrow {
+  width: 14px; height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---- scene: batch grid (sealed & batched) ---- */
+.mp3d-batch .mp3d-stage { perspective: 620px; }
+.batch-grid {
+  position: absolute; inset: 0; margin: auto; width: 168px; height: 168px;
+  display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); gap: 4px;
+  transform: rotateX(55deg) rotateZ(-6deg); transform-style: preserve-3d;
+}
+.batch-cell { border-radius: 4px; background: var(--border); border: 1px solid #dbe1e8; opacity: 0.7; }
+.batch-cell-real {
+  position: relative; background: linear-gradient(135deg, #60a5fa, #1d4ed8); border-color: var(--accent);
+  opacity: 1; transform: translateZ(26px) scale(1.25); box-shadow: 0 10px 20px rgb(37 99 235 / 0.55);
+  z-index: 2;
+}
+.batch-lock {
+  position: absolute; inset: 0; margin: auto; width: 11px; height: 11px; transform: rotateX(-55deg);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mp3d-batch[data-phase='sealed'] .batch-cell-real { animation: batch-pulse 2.4s ease-in-out infinite; }
+  .mp3d-batch[data-phase='sealed'] .batch-cell { animation: batch-fade 2.4s ease-in-out infinite; animation-delay: calc(var(--i) * 12ms); }
+}
+@keyframes batch-pulse { 0%,100% { box-shadow: 0 8px 16px rgb(37 99 235 / 0.45); } 50% { box-shadow: 0 8px 26px rgb(37 99 235 / 0.7); } }
+@keyframes batch-fade { 0%,100% { opacity: 0.5; } 50% { opacity: 0.3; } }
+
+/* ---- scene: threshold reveal (revealed & proved) ---- */
+.reveal-ring { position: absolute; inset: 0; }
+.reveal-node {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 999px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 400ms, border-color 400ms, box-shadow 400ms;
+}
+.reveal-node.is-on { background: var(--green-weak); border-color: var(--green); box-shadow: 0 0 12px rgb(22 163 74 / 0.4); }
+.reveal-share { width: 8px; height: 8px; border-radius: 999px; background: var(--muted-soft); transition: background 400ms; }
+.reveal-node.is-on .reveal-share { background: var(--green); }
+.mp3d-reveal[data-phase='opened'] .reveal-node.is-on .reveal-share {
+  animation: share-fly 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; animation-delay: calc(var(--i) * 120ms + 200ms);
+}
+@keyframes share-fly {
+  0% { transform: translate(0,0); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)); opacity: 0; }
+}
+.reveal-core {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgb(219 234 254 / 0.9), rgb(96 165 250 / 0.85));
+  border: 1.5px solid var(--accent-border);
+  transition: background 500ms, border-color 500ms, box-shadow 500ms;
+}
+.reveal-core-lock {
+  width: 22px; height: 22px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231e3a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: opacity 300ms;
+}
+.reveal-core-open { position: absolute; color: #fff; font-size: 26px; font-weight: 700; opacity: 0; transition: opacity 400ms 500ms; }
+.mp3d-reveal[data-phase='opened'] .reveal-core {
+  background: radial-gradient(circle at 40% 35%, #86efac, #16a34a); border-color: var(--green);
+  box-shadow: 0 0 28px rgb(22 163 74 / 0.55);
+}
+.mp3d-reveal[data-phase='opened'] .reveal-core-lock { opacity: 0; }
+.mp3d-reveal[data-phase='opened'] .reveal-core-open { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mp3d-batch .batch-cell, .mp3d-batch .batch-cell-real { animation: none !important; }
+  .mp3d-reveal .reveal-share { animation: none !important; }
+  .reveal-node, .reveal-core { transition: none !important; }
+}

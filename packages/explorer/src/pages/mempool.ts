@@ -25,7 +25,15 @@ import {
   txUrl,
   type MempoolConfig,
 } from '../mempool/chain';
-import { createSandwichScene, createVaultScene, type Scene } from '../mempool/visuals';
+import {
+  createBatchScene,
+  createRevealScene,
+  createSandwichScene,
+  createVaultScene,
+  type RevealScene,
+  type Scene,
+  type StepScene,
+} from '../mempool/visuals';
 import { esc, fmtCountdown, truncMiddle } from '../util';
 
 const ROUND_SECS = 30;
@@ -61,6 +69,10 @@ export function renderMempool(root: HTMLElement): () => void {
   const timers: number[] = [];
   let sandwich: Scene | null = null;
   let vault: Scene | null = null;
+  let batchScene: StepScene | null = null;
+  let revealScene: RevealScene | null = null;
+  let condId = '';
+  let sealCtHash = '';
 
   const payToken = (): Sym => (usdcToEth ? 'USDC' : 'ETH');
   const recvToken = (): Sym => (usdcToEth ? 'ETH' : 'USDC');
@@ -148,14 +160,21 @@ export function renderMempool(root: HTMLElement): () => void {
 
           <section class="mp-proofs" id="mp-proofs" hidden>
             <div class="mp-proofs-head">
-              <h3>how Peal sealed and proved your swap</h3>
-              <p>batched threshold encryption, live. every value below is a real artifact from
-              your swap — not a mock-up.</p>
+              <h3>inside the peal mempool</h3>
+              <p>how your swap was sealed and proved, with batched threshold encryption. every
+              value below is a real artifact from your swap, verifiable on-chain — not a mock-up.</p>
             </div>
-            <div class="mp-steps">
-              ${proofStep(1, 'sealed in your browser', 'mp-step-seal')}
-              ${proofStep(2, 'batched to a t-of-n committee', 'mp-step-batch')}
-              ${proofStep(3, 'revealed &amp; proved on-chain', 'mp-step-reveal')}
+            <div class="mp-lanes mp-process">
+              <article class="mp-lane mp-lane-peal" id="mp-proc-seal">
+                <header class="mp-lane-head"><h2>1. sealed &amp; batched</h2><span class="mp-lane-chip mp-chip-blue">encrypted</span></header>
+                <div class="mp-visual" id="mp-vis-batch"></div>
+                <div class="mp-proc-body" id="mp-body-seal"><div class="mp-lane-status"><span class="mp-spinner"></span>encrypting…</div></div>
+              </article>
+              <article class="mp-lane mp-lane-peal" id="mp-proc-reveal">
+                <header class="mp-lane-head"><h2>2. revealed &amp; proved</h2><span class="mp-lane-chip mp-chip-blue">on-chain</span></header>
+                <div class="mp-visual" id="mp-vis-reveal"></div>
+                <div class="mp-proc-body" id="mp-body-reveal"><div class="mp-lane-status"><span class="mp-spinner"></span>waiting for the cue…</div></div>
+              </article>
             </div>
           </section>
 
@@ -253,8 +272,12 @@ export function renderMempool(root: HTMLElement): () => void {
     swapWrap.classList.remove('is-out');
     sandwich?.destroy();
     vault?.destroy();
+    batchScene?.destroy();
+    revealScene?.destroy();
     sandwich = null;
     vault = null;
+    batchScene = null;
+    revealScene = null;
     busy = false;
     const go = appEl.querySelector<HTMLButtonElement>('#mp-go');
     if (go) {
@@ -296,10 +319,16 @@ export function renderMempool(root: HTMLElement): () => void {
 
     sandwich = createSandwichScene();
     vault = createVaultScene();
+    batchScene = createBatchScene();
+    revealScene = createRevealScene();
     appEl.querySelector<HTMLElement>('#mp-vis-public')!.appendChild(sandwich.el);
     appEl.querySelector<HTMLElement>('#mp-vis-peal')!.appendChild(vault.el);
+    appEl.querySelector<HTMLElement>('#mp-vis-batch')!.appendChild(batchScene.el);
+    appEl.querySelector<HTMLElement>('#mp-vis-reveal')!.appendChild(revealScene.el);
     sandwich.play();
     vault.play();
+    batchScene.play();
+    revealScene.play();
 
     const publicRes = appEl.querySelector<HTMLElement>('#mp-res-public')!;
     const pealRes = appEl.querySelector<HTMLElement>('#mp-res-peal')!;
@@ -310,14 +339,16 @@ export function renderMempool(root: HTMLElement): () => void {
     const committee = await client.committee();
 
     const conditionId = await client.condition({ in: ROUND_SECS, tag: 'mempool' });
+    condId = conditionId;
     const payload = encodeOrder({ trader: c.relayer, baseToQuote, amountIn, minOut, to: c.relayer });
     const sealed = await client.seal(payload, conditionId);
     if (dead) return;
 
-    // Proofs, step 1 + 2: sealed, and batched to the committee.
+    // Process card 1: sealed & batched (ciphertext + committee + batch).
+    sealCtHash = sealed.ctHash;
     appEl.querySelector<HTMLElement>('#mp-proofs')!.hidden = false;
-    fillSeal(sealed.ctHash, payload.length, committee);
-    fillCommittee(committee, null);
+    fillSealBatch(sealed.ctHash, committee, null);
+    batchScene?.seal();
 
     const commit = await commitSealed(conditionId, sealed.ctHash);
     pealRes.innerHTML = laneStatus(
@@ -354,68 +385,58 @@ export function renderMempool(root: HTMLElement): () => void {
     busy = false;
   }
 
-  // ---- proof steps (real BTE artifacts) ---------------------------------
+  // ---- process cards (real BTE artifacts, uniform with the lanes) -------
 
-  function stepBody(cls: string): HTMLElement {
-    return appEl.querySelector<HTMLElement>(`.${cls} .mp-step-body`)!;
-  }
-
-  function fillSeal(ctHash: string, bytes: number, committee: { n: number }): void {
-    stepBody('mp-step-seal').innerHTML = `
-      <p class="mp-step-lead">Your order was encrypted in this tab with the committee's public
-      key, using batched threshold encryption. Only the ciphertext left your browser.</p>
-      ${proofRow('ciphertext', `<span class="mono">${esc(truncMiddle(ctHash, 12, 10))}</span>`)}
-      ${proofRow('payload', `${bytes} bytes, encrypted to ${committee.n} operators`)}
-      ${proofRow('the searcher sees', `<span class="mp-danger">nothing — no amount, no direction, no token</span>`)}
-      <p class="mp-step-note">the amount and direction never touch the network in the clear.</p>`;
-    markStepDone('mp-step-seal');
-  }
-
-  function fillCommittee(
+  /** Card 1: sealed in the browser and batched to the committee. */
+  function fillSealBatch(
+    ctHash: string,
     committee: { n: number; t: number; b: number; digest: string },
     batch: { real: number; total: number } | null,
   ): void {
     const batchRow = batch
       ? proofRow(
           'this batch',
-          `<b>${batch.real}</b> real order${batch.real === 1 ? '' : 's'} + <b>${batch.total - batch.real}</b> decoys = ${batch.total} slots`,
+          `<b>${batch.real}</b> real + <b>${batch.total - batch.real}</b> decoys = ${batch.total} slots`,
         )
-      : proofRow('batch size', `${committee.b} slots (real orders padded with decoys)`);
-    stepBody('mp-step-batch').innerHTML = `
-      <p class="mp-step-lead">It joined a batch sealed to a <b>${committee.t}-of-${committee.n}</b>
-      threshold committee. No single operator can open it; any ${committee.t} together can, and
-      only on the cue. The whole batch opens at once, so even the number of real orders is hidden
-      behind decoys.</p>
-      ${proofRow('committee', operatorPips(committee.n, committee.t))}
-      ${proofRow('threshold', `any <b>${committee.t}</b> of <b>${committee.n}</b> operators`)}
+      : proofRow('batch', `${committee.b} slots (real orders hidden among decoys)`);
+    const body = appEl.querySelector<HTMLElement>('#mp-body-seal')!;
+    body.innerHTML = `
+      <p class="mp-proc-lead">Encrypted in your browser to the committee's key, then dropped into a
+      batch sealed to a <b>${committee.t}-of-${committee.n}</b> committee. The searcher sees only a
+      hash — no amount, no direction — and even the count of real orders hides behind decoys.</p>
+      ${proofRow('ciphertext', `<span class="mono">${esc(truncMiddle(ctHash, 8, 8))}</span>`)}
+      ${proofRow('committee', `${operatorPips(committee.n, committee.t)} any <b>${committee.t}</b> of <b>${committee.n}</b>`)}
       ${batchRow}
-      ${proofRow('params digest', `<span class="mono">${esc(truncMiddle(committee.digest, 10, 8))}</span>`)}`;
-    markStepDone('mp-step-batch');
+      ${proofRow('params digest', `<span class="mono">${esc(truncMiddle(committee.digest, 8, 6))}</span>`)}`;
+    appEl.querySelector<HTMLElement>('#mp-proc-seal')!.classList.add('is-done');
   }
 
-  function fillReveal(
+  /** Card 2: revealed by t-of-n shares and proved on-chain. */
+  function fillRevealCard(
     reveal: { merkleRoot: string; shares: Array<{ verified: boolean }>; slots: Array<{ isDummy: boolean }> },
     committee: { n: number; t: number },
     txHash: string,
   ): void {
     const verified = reveal.shares.filter((s) => s.verified).length;
     const real = reveal.slots.filter((s) => !s.isDummy).length;
-    stepBody('mp-step-reveal').innerHTML = `
-      <p class="mp-step-lead">At the cue, operators each posted one 48-byte share. Any
-      ${committee.t} combine to open the <b>whole batch at once</b> — after the ordering is
-      already fixed, so there is nothing left to front-run. Every share is checked with a public
-      pairing equation.</p>
-      ${proofRow('shares', `<b>${verified}</b> of ${committee.n} verified ${checks(verified, committee.n)}`)}
-      ${proofRow('batch opened', `${real} real order${real === 1 ? '' : 's'} recovered together`)}
-      ${proofRow('merkle root', `<span class="mono">${esc(truncMiddle(reveal.merkleRoot, 10, 8))}</span>`)}
-      ${proofRow('settled on-chain', `executeBatch re-derived that exact root ${link(txHash)}`)}
-      <p class="mp-step-note">the contract refuses any batch whose root does not match — so the
-      swaps executed are provably the ones the committee revealed.</p>`;
-    markStepDone('mp-step-reveal');
-  }
-
-  function markStepDone(cls: string): void {
-    appEl.querySelector<HTMLElement>(`.${cls}`)?.classList.add('is-done');
+    revealScene?.reveal(verified);
+    const verifyLink = condId
+      ? `<a class="mp-proc-verify" href="#/condition/${encodeURIComponent(condId)}">
+           verify the full batch — every slot, share &amp; timing
+           <span class="mp-proc-arrow" aria-hidden="true"></span></a>`
+      : '';
+    const body = appEl.querySelector<HTMLElement>('#mp-body-reveal')!;
+    body.innerHTML = `
+      <p class="mp-proc-lead">At the cue each operator posted one 48-byte share; any
+      <b>${committee.t}</b> combine to open the <b>whole batch at once</b>, after the ordering is
+      fixed. Every share is checked with a public pairing equation, and the on-chain
+      <span class="mono">executeBatch</span> re-derives the batch's root and rejects any mismatch.</p>
+      ${proofRow('shares', `${checks(verified, committee.n)} <b>${verified}</b> of ${committee.n} verified`)}
+      ${proofRow('batch opened', `${real} real order${real === 1 ? '' : 's'}, all at once`)}
+      ${proofRow('merkle root', `<span class="mono">${esc(truncMiddle(reveal.merkleRoot, 8, 6))}</span>`)}
+      ${proofRow('settled', `executeBatch ${link(txHash)}`)}
+      ${verifyLink}`;
+    appEl.querySelector<HTMLElement>('#mp-proc-reveal')!.classList.add('is-done');
   }
 
   // ---- lane polling / rendering -----------------------------------------
@@ -499,8 +520,8 @@ export function renderMempool(root: HTMLElement): () => void {
           const st = await client.status(conditionId);
           if (st.firesAt) firesAt = st.firesAt;
           // Live batch fill: how many real orders are queued with yours.
-          if (st.ciphertextCount) {
-            fillCommittee(committee, { real: st.realCount, total: committee.b });
+          if (st.ciphertextCount && sealCtHash) {
+            fillSealBatch(sealCtHash, committee, { real: st.realCount, total: committee.b });
           }
         } catch {
           /* transient */
@@ -528,7 +549,7 @@ export function renderMempool(root: HTMLElement): () => void {
         // Proof step 3: the real reveal (shares, root, on-chain verification).
         try {
           const reveal = await client.reveal(conditionId);
-          if (reveal) fillReveal(reveal, committee, r.txHash ?? '');
+          if (reveal) fillRevealCard(reveal, committee, r.txHash ?? '');
         } catch {
           /* the lane result already shows the settlement tx */
         }
@@ -554,6 +575,8 @@ export function renderMempool(root: HTMLElement): () => void {
     for (const t of timers) clearInterval(t);
     sandwich?.destroy();
     vault?.destroy();
+    batchScene?.destroy();
+    revealScene?.destroy();
     document.title = previousTitle;
   };
 }
@@ -577,18 +600,6 @@ function swapField(id: 'pay' | 'recv', label: string, sym: Sym, value: string): 
         <span class="mp-chain">on Tempo</span>
       </div>
     </div>`;
-}
-
-function proofStep(n: number, title: string, cls: string): string {
-  return `
-    <article class="mp-step ${cls}">
-      <header class="mp-step-head">
-        <span class="mp-step-n">${n}</span>
-        <h4>${title}</h4>
-        <span class="mp-step-check" aria-hidden="true"></span>
-      </header>
-      <div class="mp-step-body"><div class="mp-lane-status"><span class="mp-spinner"></span>waiting…</div></div>
-    </article>`;
 }
 
 function proofRow(k: string, v: string): string {

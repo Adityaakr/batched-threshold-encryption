@@ -536,6 +536,19 @@ CSS, no JS state). ALL em-dashes removed from mempool.ts; placeholders use "·".
 FLOW_COPY holds the 4 trust paragraphs. Animations decoupled from swap state so
 they always show motion; real data fills each step's data rows as it lands.
 
+### Symmetric attack pipeline (2026-07-12, DONE)
+Public side was one card vs peal's 4-step pipeline (lopsided). Added "how the
+public mempool takes your money": a red-themed 3-step pipeline structurally
+identical to the peal one, with looping CSS-3D scenes (visuals.ts createFxExposed
+= readable order + scan beam + watching eye; createFxFrontrun = searcher token
+jumps ahead of "you" + price up; createFxSandwich = attacker slabs clamp victim,
+coins fly to searcher) + real data (your order/floor, front-run, victimOut vs
+quote, $ taken, on-chain tx). flowStep now takes a `pub` bool -> red chip + red
+done-state + p-prefixed ids (mp-pstep/pviz/pdata). PUB_COPY holds the 3 attack
+paragraphs. Page reads problem (attack) then solution (protection), both lanes in
+matching depth. Full order: swap -> outcome comparison + diff -> public attack
+pipeline -> peal protection pipeline -> FAQ.
+
 ### Tempo-under-load learnings (robustness)
 Rapid concurrent test swaps wedged agent nonces (a stalled tx blocks everything
 behind it; symptom: relayer /commit hangs forever). Fixes applied: TX_GAS

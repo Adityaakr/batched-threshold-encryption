@@ -30,6 +30,19 @@ const tx = serializer();
 
 let bootBlock = 0n;
 
+// The RPC caps eth_getLogs at a 100k block range, and this process stays up for
+// days, so scanning from bootBlock eventually exceeds it. Every event we look up
+// belongs to a swap the visitor started seconds ago, so a trailing window is
+// always enough. Never start before bootBlock: results from a previous run of
+// the demo are not ours to report.
+const LOG_WINDOW = 90_000n;
+
+async function scanFrom(): Promise<bigint> {
+  const latest = await pub.getBlockNumber();
+  const floor = latest > LOG_WINDOW ? latest - LOG_WINDOW : 0n;
+  return floor > bootBlock ? floor : bootBlock;
+}
+
 async function ensureApproval(token: Address, spender: Address): Promise<void> {
   const allowance = await pub.readContract({
     address: token, abi: erc20Abi, functionName: 'allowance', args: [relayer, spender],
@@ -177,14 +190,15 @@ async function commit(body: { conditionId: string; ctHash: string }) {
 
 /** The public order's fate: sandwiched (with the numbers) or honestly filled. */
 async function publicResult(orderId: Hex) {
+  const fromBlock = await scanFrom();
   const [sandwiched, executed] = await Promise.all([
     pub.getContractEvents({
       address: d.publicBuilder, abi: publicBuilderAbi, eventName: 'Sandwiched',
-      args: { id: orderId }, fromBlock: bootBlock,
+      args: { id: orderId }, fromBlock,
     }),
     pub.getContractEvents({
       address: d.publicBuilder, abi: publicBuilderAbi, eventName: 'Executed',
-      args: { id: orderId }, fromBlock: bootBlock,
+      args: { id: orderId }, fromBlock,
     }),
   ]);
   if (sandwiched.length > 0) {
@@ -205,14 +219,15 @@ async function publicResult(orderId: Hex) {
 /** The sealed order's fate: settled on-chain at reveal, with the fill. */
 async function pealResult(conditionId: string) {
   const cond = sha256(toBytes(conditionId));
+  const fromBlock = await scanFrom();
   const [batch, fills] = await Promise.all([
     pub.getContractEvents({
       address: d.pealMempool, abi: pealMempoolAbi, eventName: 'BatchExecuted',
-      args: { conditionId: cond }, fromBlock: bootBlock,
+      args: { conditionId: cond }, fromBlock,
     }),
     pub.getContractEvents({
       address: d.pealMempool, abi: pealMempoolAbi, eventName: 'OrderFilled',
-      args: { conditionId: cond }, fromBlock: bootBlock,
+      args: { conditionId: cond }, fromBlock,
     }),
   ]);
   if (batch.length === 0) return { done: false };

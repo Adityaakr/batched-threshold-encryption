@@ -1,0 +1,40 @@
+/* Styling for the React landing island (pages/landing.tsx).
+ *
+ * The rest of the explorer is a vanilla-TS app with a large hand-written
+ * style.css, so we deliberately DO NOT pull in Tailwind's Preflight — importing
+ * only the `theme` and `utilities` layers keeps Tailwind class-driven and inert
+ * on every other route. A small box-sizing reset is scoped to `.peal-landing`
+ * so the landing gets sane defaults without resetting the whole document. */
+
+/* Nokia phone font for the messages typed onto the screen in the hero video. */
+@import url('https://db.onlinewebfonts.com/c/440b53b1a1c65037f944ff19259d8014?family=Nokia+Cellphone+FC+Small');
+
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@theme {
+  --font-instrument: 'Instrument Serif', serif;
+  --font-serif: 'Instrument Serif', serif;
+  --font-sans: 'Inter', sans-serif;
+  --font-nokia: 'Nokia Cellphone FC Small', monospace;
+}
+
+@utility font-instrument {
+  font-family: 'Instrument Serif', serif;
+}
+
+/* Scoped defaults — the island owns its box model and body font without
+ * leaning on Preflight, so no other explorer route is disturbed. */
+.peal-landing {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.peal-landing,
+.peal-landing *,
+.peal-landing *::before,
+.peal-landing *::after {
+  box-sizing: border-box;
+}
